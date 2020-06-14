@@ -1,5 +1,5 @@
 force_explicit_abi = false
-hard_tabs = true
+hard_tabs = false
 max_width = 80
 merge_derives = true
 newline_style = "Unix"
