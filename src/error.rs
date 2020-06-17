@@ -17,6 +17,7 @@ pub enum CompileError {
     ParseFloat(CodePos),
     MismatchedClosingDelimiter(CodePos, char, char),
     UnexpectedClosingDelimiter(CodePos, char),
+    UnclosedStringLiteral(CodePos),
 }
 
 impl std::error::Error for CompileError {}
@@ -45,6 +46,11 @@ impl fmt::Debug for CompileError {
                 f,
                 "CompileError: Mismatched closing delimiter '{}{}' at {}",
                 open, close, pos
+            ),
+            Self::UnclosedStringLiteral(pos) => write!(
+                f,
+                "CompileError: Unclosed string literal at {}",
+                pos
             ),
         }
     }

@@ -265,13 +265,26 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
         code_pos.column += 1;
         if ch == '\n' {
             code_pos.line += 1;
-            code_pos.column = 0;
+            code_pos.column = 1;
         }
 
         prev_ch[0] = prev_ch[1];
         prev_ch[1] = ch;
 
         option_ch = code.next();
+    }
+
+    if let Some(some_literal_type) = &literal_type {
+        if LiteralType::Str == *some_literal_type {
+            return Err(CompileError::UnclosedStringLiteral(code_pos))
+        }
+        push_token(
+            '\n',
+            &mut literal_type,
+            &mut tokens,
+            &mut literal,
+            &code_pos,
+        )?;
     }
 
     Ok(tokens)

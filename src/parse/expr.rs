@@ -1,5 +1,3 @@
-use crate::{lexer::Token, CompileResult};
-
 #[derive(Clone, Copy)]
 pub enum BinaryOperator {
     Access = 0x00,
@@ -107,8 +105,4 @@ pub enum Expr {
     List(Vec<Expr>),
     Literal(Literal),
     None,
-}
-
-pub fn parse(_tokens: &[Token]) -> CompileResult<Expr> {
-    Ok(Expr::None)
 }
