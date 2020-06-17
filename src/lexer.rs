@@ -5,27 +5,45 @@ use std::str::Chars;
 #[derive(Debug)]
 pub enum Token {
     Id(String),
-    Operator(char),
+    Operator(String),
     Literal(Literal),
-    BlockStart(usize, char),
-    BlockEnd(usize, char),
+    OpenBlock(usize, char),
+    CloseBlock(usize, char),
 }
 
 #[derive(Eq, PartialEq)]
 enum LiteralType {
     Id,
+    Operator,
     Str,
     Int,
     UInt,
     Float,
 }
 
-pub fn lex(mut code: Chars) -> CompileResult<Vec<Token>> {
+fn where_contains<'a, T, U>(a: U, cmp_el: &T) -> Option<usize>
+where
+    T: PartialEq + 'static,
+    U: IntoIterator<Item = &'a T>,
+{
+    for (i, el) in a.into_iter().enumerate() {
+        if *el == *cmp_el {
+            return Some(i);
+        }
+    }
+    None
+}
+
+pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
     let mut tokens = Vec::new();
     let mut literal = String::new();
     let mut literal_type = None::<LiteralType>;
-    let mut block_lvl = 0;
-    let mut code_pos = CodePos { line: 0, column: 0 };
+    let mut blocks = Vec::new();
+    let mut code_pos = CodePos { line: 1, column: 1 };
+
+    const OPEN_BLOCK: [char; 3] = ['(', '{', '['];
+    const CLOSE_BLOCK: [char; 3] = [')', '}', ']'];
+    const IGNORABLE: [char; 4] = [' ', '\n', '\r', '\t'];
 
     let mut push_token = |ch: char,
                           literal_type: &mut Option<LiteralType>,
@@ -47,25 +65,31 @@ pub fn lex(mut code: Chars) -> CompileResult<Vec<Token>> {
                     Ok(u) => tokens.push(Token::Literal(Literal::UInt(u))),
                     Err(_) => return Err(CompileError::ParseInt(*code_pos)),
                 },
-                LiteralType::Id => tokens.push(Token::Id(literal.clone())),
-
-                LiteralType::Str => {
-                    tokens.push(Token::Literal(Literal::Str(literal.clone())))
+                LiteralType::Id => tokens.push(Token::Id((*literal).clone())),
+                LiteralType::Operator => {
+                    tokens.push(Token::Operator((*literal).clone()))
                 }
+                LiteralType::Str => tokens
+                    .push(Token::Literal(Literal::Str((*literal).clone()))),
             }
-        } else {
-            match ch {
-                '(' | '[' | '{' => {
-                    tokens.push(Token::BlockStart(block_lvl, ch));
-                    block_lvl += 1;
+        } else if let Some(open_idx) = where_contains(&OPEN_BLOCK, &ch) {
+            blocks.push(open_idx);
+            tokens.push(Token::OpenBlock(blocks.len(), ch));
+        } else if let Some(close_idx) = where_contains(&CLOSE_BLOCK, &ch) {
+            if let Some(open_idx) = blocks.pop() {
+                if open_idx != close_idx {
+                    return Err(CompileError::MismatchedClosingDelimiter(
+                        *code_pos,
+                        OPEN_BLOCK[open_idx],
+                        ch,
+                    ));
                 }
-                ')' | ']' | '}' => {
-                    block_lvl -= 1;
-                    tokens.push(Token::BlockEnd(block_lvl, ch));
-                }
-                ' ' => {} // ignorable
-                _ => tokens.push(Token::Operator(ch)),
+            } else {
+                return Err(CompileError::UnexpectedClosingDelimiter(
+                    *code_pos, ch,
+                ));
             }
+            tokens.push(Token::CloseBlock(blocks.len(), ch));
         }
 
         *literal_type = None;
@@ -77,12 +101,20 @@ pub fn lex(mut code: Chars) -> CompileResult<Vec<Token>> {
     let mut prev_ch = ['\x00', '\x00'];
     let mut option_ch = code.next();
     while let Some(ch) = option_ch {
+        // ignore '\r'
+        if ch == '\r' {
+            option_ch = code.next()
+        }
+
+        // if `literal_type` was determened then match the `LiteralType`
         if let Some(some_literal_type) = &literal_type {
             match some_literal_type {
                 LiteralType::Id => match ch {
+                    // If `ch` can be in the id
                     'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => {
                         literal.push(ch);
                     }
+                    // else push the token and reinterpret the char
                     _ => {
                         push_token(
                             ch,
@@ -94,10 +126,36 @@ pub fn lex(mut code: Chars) -> CompileResult<Vec<Token>> {
                         continue;
                     }
                 },
-
+                // very similar to Id
+                LiteralType::Operator => {
+                    if ch == '"'
+                        || ch == '_'
+                        || ('0'..='9').contains(&ch)
+                        || ('A'..='Z').contains(&ch)
+                        || ('a'..='z').contains(&ch)
+                        || OPEN_BLOCK.contains(&ch)
+                        || CLOSE_BLOCK.contains(&ch)
+                        || IGNORABLE.contains(&ch)
+                    {
+                        push_token(
+                            ch,
+                            &mut literal_type,
+                            &mut tokens,
+                            &mut literal,
+                            &code_pos,
+                        )?;
+                        continue;
+                    } else {
+                        literal.push(ch);
+                    }
+                }
                 LiteralType::Float => match ch {
                     '0'..='9' => literal.push(ch),
                     _ => {
+                        if ('a'..='z').contains(&ch) | ('A'..='Z').contains(&ch)
+                        {
+                            return Err(CompileError::ParseInt(code_pos));
+                        }
                         push_token(
                             ch,
                             &mut literal_type,
@@ -114,34 +172,13 @@ pub fn lex(mut code: Chars) -> CompileResult<Vec<Token>> {
                         literal.push(ch);
                         literal_type = Some(LiteralType::Float);
                     }
-                    'u' => {
-                        literal_type = Some(LiteralType::UInt);
-                        push_token(
-                            ch,
-                            &mut literal_type,
-                            &mut tokens,
-                            &mut literal,
-                            &code_pos,
-                        )?;
-                    }
-                    'f' => {
-                        literal_type = Some(LiteralType::Float);
-                        push_token(
-                            ch,
-                            &mut literal_type,
-                            &mut tokens,
-                            &mut literal,
-                            &code_pos,
-                        )?;
-                    }
-                    'i' => push_token(
-                        ch,
-                        &mut literal_type,
-                        &mut tokens,
-                        &mut literal,
-                        &code_pos,
-                    )?,
+                    'u' => literal_type = Some(LiteralType::UInt),
+                    'f' => literal_type = Some(LiteralType::Float),
                     _ => {
+                        if ('a'..='z').contains(&ch) | ('A'..='Z').contains(&ch)
+                        {
+                            return Err(CompileError::ParseInt(code_pos));
+                        }
                         push_token(
                             ch,
                             &mut literal_type,
@@ -154,7 +191,20 @@ pub fn lex(mut code: Chars) -> CompileResult<Vec<Token>> {
                 },
                 // This shouldn't happen because UInts are Ints until the 'u' suffix
                 LiteralType::UInt => {
-                    panic!("Somehow there was a UInt at the literal building")
+                    if ('a'..='z').contains(&ch)
+                        | ('A'..='Z').contains(&ch)
+                        | ('0'..='9').contains(&ch)
+                    {
+                        return Err(CompileError::ParseInt(code_pos));
+                    }
+                    push_token(
+                        ch,
+                        &mut literal_type,
+                        &mut tokens,
+                        &mut literal,
+                        &code_pos,
+                    )?;
+                    continue;
                 }
                 LiteralType::Str => {
                     if prev_ch[1] == '\\' && prev_ch[0] != '\\' {
@@ -191,17 +241,27 @@ pub fn lex(mut code: Chars) -> CompileResult<Vec<Token>> {
                     literal.push(ch);
                 }
                 '"' => literal_type = Some(LiteralType::Str),
-                _ => push_token(
-                    ch,
-                    &mut literal_type,
-                    &mut tokens,
-                    &mut literal,
-                    &code_pos,
-                )?,
+                _ => {
+                    if !OPEN_BLOCK.contains(&ch)
+                        && !CLOSE_BLOCK.contains(&ch)
+                        && !IGNORABLE.contains(&ch)
+                    {
+                        literal_type = Some(LiteralType::Operator);
+                        literal.push(ch);
+                    } else {
+                        push_token(
+                            ch,
+                            &mut literal_type,
+                            &mut tokens,
+                            &mut literal,
+                            &code_pos,
+                        )?;
+                    }
+                }
             }
         }
 
-        // iter next + increment code_pos
+        // `code.next` + increment code_pos
         code_pos.column += 1;
         if ch == '\n' {
             code_pos.line += 1;

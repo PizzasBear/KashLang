@@ -15,6 +15,8 @@ impl fmt::Display for CodePos {
 pub enum CompileError {
     ParseInt(CodePos),
     ParseFloat(CodePos),
+    MismatchedClosingDelimiter(CodePos, char, char),
+    UnexpectedClosingDelimiter(CodePos, char),
 }
 
 impl std::error::Error for CompileError {}
@@ -34,6 +36,16 @@ impl fmt::Debug for CompileError {
             Self::ParseInt(pos) => {
                 write!(f, "CompileError: `ParseInt` at {}", pos)
             }
+            Self::UnexpectedClosingDelimiter(pos, ch) => write!(
+                f,
+                "CompileError: Unexpected closing delimiter '{}' at {}",
+                ch, pos
+            ),
+            Self::MismatchedClosingDelimiter(pos, open, close) => write!(
+                f,
+                "CompileError: Mismatched closing delimiter '{}{}' at {}",
+                open, close, pos
+            ),
         }
     }
 }
