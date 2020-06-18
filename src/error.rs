@@ -47,11 +47,9 @@ impl fmt::Debug for CompileError {
                 "CompileError: Mismatched closing delimiter '{}{}' at {}",
                 open, close, pos
             ),
-            Self::UnclosedStringLiteral(pos) => write!(
-                f,
-                "CompileError: Unclosed string literal at {}",
-                pos
-            ),
+            Self::UnclosedStringLiteral(pos) => {
+                write!(f, "CompileError: Unclosed string literal at {}", pos)
+            }
         }
     }
 }

@@ -1,14 +1,24 @@
-use crate::parse::expr::Literal;
-use crate::{error::CodePos, CompileError, CompileResult};
 use std::str::Chars;
+
+use crate::{CompileError, CompileResult, error::CodePos};
+use crate::parse::expr::Literal;
 
 #[derive(Debug)]
 pub enum Token {
     Id(String),
     Operator(String),
     Literal(Literal),
-    OpenBlock(usize, char),
-    CloseBlock(usize, char),
+    OpenBlock {
+        block_level: usize,
+        ch: char,
+        close_idx: usize,
+    },
+    CloseBlock {
+        block_level: usize,
+        ch: char,
+        open_idx: usize,
+    },
+    NewLine,
 }
 
 #[derive(Eq, PartialEq)]
@@ -19,6 +29,7 @@ enum LiteralType {
     Int,
     UInt,
     Float,
+    Comment,
 }
 
 fn where_contains<'a, T, U>(a: U, cmp_el: &T) -> Option<usize>
@@ -71,12 +82,17 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                 }
                 LiteralType::Str => tokens
                     .push(Token::Literal(Literal::Str((*literal).clone()))),
+                LiteralType::Comment => panic!("Comment token should never be pushed."),
             }
         } else if let Some(open_idx) = where_contains(&OPEN_BLOCK, &ch) {
-            blocks.push(open_idx);
-            tokens.push(Token::OpenBlock(blocks.len(), ch));
+            blocks.push((tokens.len(), open_idx));
+            tokens.push(Token::OpenBlock {
+                block_level: blocks.len() - 1,
+                ch,
+                close_idx: 0,
+            });
         } else if let Some(close_idx) = where_contains(&CLOSE_BLOCK, &ch) {
-            if let Some(open_idx) = blocks.pop() {
+            if let Some((open_token_idx, open_idx)) = blocks.pop() {
                 if open_idx != close_idx {
                     return Err(CompileError::MismatchedClosingDelimiter(
                         *code_pos,
@@ -84,12 +100,24 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                         ch,
                     ));
                 }
+                let tokens_len = tokens.len();
+                if let Token::OpenBlock { close_idx, .. } =
+                &mut tokens[open_token_idx]
+                {
+                    *close_idx = tokens_len;
+                } else {
+                    panic!("The token that was referenced in `blocks` wasn't `Token::OpenBlock`.");
+                }
+                tokens.push(Token::CloseBlock {
+                    block_level: blocks.len(),
+                    ch,
+                    open_idx: open_token_idx,
+                });
             } else {
                 return Err(CompileError::UnexpectedClosingDelimiter(
                     *code_pos, ch,
                 ));
             }
-            tokens.push(Token::CloseBlock(blocks.len(), ch));
         }
 
         *literal_type = None;
@@ -106,7 +134,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
             option_ch = code.next()
         }
 
-        // if `literal_type` was determened then match the `LiteralType`
+        // if `literal_type` was determined then match the `LiteralType`
         if let Some(some_literal_type) = &literal_type {
             match some_literal_type {
                 LiteralType::Id => match ch {
@@ -189,7 +217,6 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                         continue;
                     }
                 },
-                // This shouldn't happen because UInts are Ints until the 'u' suffix
                 LiteralType::UInt => {
                     if ('a'..='z').contains(&ch)
                         | ('A'..='Z').contains(&ch)
@@ -229,6 +256,13 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                         literal.push(ch)
                     }
                 }
+                LiteralType::Comment => {
+                    if ch == '\n' {
+                        prev_ch = ['\x00', '\x00'];
+                        literal.clear();
+                        literal_type = None;
+                    }
+                }
             }
         } else {
             match ch {
@@ -241,6 +275,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                     literal.push(ch);
                 }
                 '"' => literal_type = Some(LiteralType::Str),
+                '#' => literal_type = Some(LiteralType::Comment),
                 _ => {
                     if !OPEN_BLOCK.contains(&ch)
                         && !CLOSE_BLOCK.contains(&ch)
@@ -266,6 +301,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
         if ch == '\n' {
             code_pos.line += 1;
             code_pos.column = 1;
+            tokens.push(Token::NewLine)
         }
 
         prev_ch[0] = prev_ch[1];
@@ -276,7 +312,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
 
     if let Some(some_literal_type) = &literal_type {
         if LiteralType::Str == *some_literal_type {
-            return Err(CompileError::UnclosedStringLiteral(code_pos))
+            return Err(CompileError::UnclosedStringLiteral(code_pos));
         }
         push_token(
             '\n',
