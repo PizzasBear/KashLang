@@ -1,6 +1,7 @@
 use std::str::Chars;
 
 use crate::{CompileError, CompileResult, error::CodePos};
+use crate::lexer::Token::CloseBlock;
 use crate::parse::expr::Literal;
 
 #[derive(Debug)]
@@ -25,7 +26,7 @@ pub enum Token {
 enum LiteralType {
     Id,
     Operator,
-    Str,
+    Str(CodePos),
     Int,
     UInt,
     Float,
@@ -35,7 +36,7 @@ enum LiteralType {
 fn where_contains<'a, T, U>(a: U, cmp_el: &T) -> Option<usize>
 where
     T: PartialEq + 'static,
-    U: IntoIterator<Item = &'a T>,
+    U: IntoIterator<Item=&'a T>,
 {
     for (i, el) in a.into_iter().enumerate() {
         if *el == *cmp_el {
@@ -45,86 +46,145 @@ where
     None
 }
 
-pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
-    let mut tokens = Vec::new();
+const OPEN_BLOCK: [char; 3] = ['(', '{', '['];
+const CLOSE_BLOCK: [char; 3] = [')', '}', ']'];
+const IGNORABLE: [char; 4] = [' ', '\n', '\r', '\t'];
+
+fn push_token(
+    ch: char,
+    literal_type: &mut Option<LiteralType>,
+    tokens: &mut Vec<(Token, Option<CodePos>)>,
+    literal: &mut String,
+    blocks: &mut Vec<(usize, usize)>,
+    code_pos: &CodePos,
+) -> CompileResult<()> {
+    if let Some(literal_type) = literal_type {
+        match literal_type {
+            LiteralType::Float => match literal.parse() {
+                Ok(f) => tokens
+                    .push((Token::Literal(Literal::Float(f)),
+                           Some(CodePos {
+                               column: code_pos.column - literal.len(),
+                               line: code_pos.line,
+                           }),
+                    )),
+                Err(_) => return Err(CompileError::ParseFloat(*code_pos)),
+            },
+            LiteralType::Int => match literal.parse() {
+                Ok(i) => tokens
+                    .push((Token::Literal(Literal::Int(i)),
+                           Some(CodePos {
+                               column: code_pos.column - literal.len(),
+                               line: code_pos.line,
+                           }),
+                    )),
+                Err(_) => return Err(CompileError::ParseInt(*code_pos)),
+            },
+            LiteralType::UInt => match literal.parse() {
+                Ok(u) => tokens
+                    .push((Token::Literal(Literal::UInt(u)),
+                           Some(CodePos {
+                               column: code_pos.column - literal.len() - 1,
+                               line: code_pos.line,
+                           }),
+                    )),
+                Err(_) => return Err(CompileError::ParseInt(*code_pos)),
+            },
+            LiteralType::Id => {
+                if literal == "None" {
+                    tokens.push((
+                        Token::Literal(Literal::None),
+                        Some(CodePos {
+                            column: code_pos.column - 4,
+                            line: code_pos.line,
+                        }),
+                    ));
+                } else {
+                    tokens.push((
+                        Token::Id((*literal).clone()),
+                        Some(CodePos {
+                            column: code_pos.column - literal.len(),
+                            line: code_pos.line,
+                        }),
+                    ));
+                }
+            }
+            LiteralType::Operator => tokens
+                .push((Token::Operator((*literal).clone()), Some(CodePos {
+                    column: code_pos.column - literal.len(),
+                    line: code_pos.line,
+                }))),
+            LiteralType::Str(pos) => tokens.push((
+                Token::Literal(Literal::Str((*literal).clone())),
+                Some(*pos),
+            )),
+            LiteralType::Comment => {
+                panic!("Comment token should never be pushed.")
+            }
+        }
+    } else if let Some(open_idx) = where_contains(&OPEN_BLOCK, &ch) {
+        blocks.push((tokens.len(), open_idx));
+        tokens.push((
+            Token::OpenBlock {
+                block_level: blocks.len(),
+                ch,
+                close_idx: 0,
+            },
+            Some(*code_pos),
+        ));
+    } else if let Some(close_idx) = where_contains(&CLOSE_BLOCK, &ch) {
+        if let Some((open_token_idx, open_idx)) = blocks.pop() {
+            if open_idx != close_idx {
+                return Err(CompileError::MismatchedClosingDelimiter(
+                    *code_pos,
+                    OPEN_BLOCK[open_idx],
+                    ch,
+                ));
+            }
+            let tokens_len = tokens.len();
+            if let Token::OpenBlock { close_idx, .. } =
+            &mut tokens[open_token_idx].0
+            {
+                *close_idx = tokens_len;
+            } else {
+                panic!("The token that was referenced in `blocks` wasn't `Token::OpenBlock`.");
+            }
+            tokens.push((
+                Token::CloseBlock {
+                    block_level: blocks.len() + 1,
+                    ch,
+                    open_idx: open_token_idx,
+                },
+                Some(*code_pos),
+            ));
+        } else {
+            return Err(CompileError::UnexpectedClosingDelimiter(
+                *code_pos, ch,
+            ));
+        }
+    }
+
+    *literal_type = None;
+    literal.clear();
+
+    Ok(())
+}
+
+pub async fn lex(
+    mut code: Chars<'_>,
+) -> CompileResult<Vec<(Token, Option<CodePos>)>> {
+    let mut tokens = vec![(
+        Token::OpenBlock {
+            block_level: 0,
+            ch: '(',
+            close_idx: 0,
+        },
+        None,
+    )];
     let mut literal = String::new();
     let mut literal_type = None::<LiteralType>;
     let mut blocks = Vec::new();
     let mut code_pos = CodePos { line: 1, column: 1 };
-
-    const OPEN_BLOCK: [char; 3] = ['(', '{', '['];
-    const CLOSE_BLOCK: [char; 3] = [')', '}', ']'];
-    const IGNORABLE: [char; 4] = [' ', '\n', '\r', '\t'];
-
-    let mut push_token = |ch: char,
-                          literal_type: &mut Option<LiteralType>,
-                          tokens: &mut Vec<Token>,
-                          literal: &mut String,
-                          code_pos: &CodePos|
-     -> CompileResult<()> {
-        if let Some(literal_type) = literal_type {
-            match literal_type {
-                LiteralType::Float => match literal.parse() {
-                    Ok(f) => tokens.push(Token::Literal(Literal::Float(f))),
-                    Err(_) => return Err(CompileError::ParseFloat(*code_pos)),
-                },
-                LiteralType::Int => match literal.parse() {
-                    Ok(i) => tokens.push(Token::Literal(Literal::Int(i))),
-                    Err(_) => return Err(CompileError::ParseInt(*code_pos)),
-                },
-                LiteralType::UInt => match literal.parse() {
-                    Ok(u) => tokens.push(Token::Literal(Literal::UInt(u))),
-                    Err(_) => return Err(CompileError::ParseInt(*code_pos)),
-                },
-                LiteralType::Id => tokens.push(Token::Id((*literal).clone())),
-                LiteralType::Operator => {
-                    tokens.push(Token::Operator((*literal).clone()))
-                }
-                LiteralType::Str => tokens
-                    .push(Token::Literal(Literal::Str((*literal).clone()))),
-                LiteralType::Comment => panic!("Comment token should never be pushed."),
-            }
-        } else if let Some(open_idx) = where_contains(&OPEN_BLOCK, &ch) {
-            blocks.push((tokens.len(), open_idx));
-            tokens.push(Token::OpenBlock {
-                block_level: blocks.len() - 1,
-                ch,
-                close_idx: 0,
-            });
-        } else if let Some(close_idx) = where_contains(&CLOSE_BLOCK, &ch) {
-            if let Some((open_token_idx, open_idx)) = blocks.pop() {
-                if open_idx != close_idx {
-                    return Err(CompileError::MismatchedClosingDelimiter(
-                        *code_pos,
-                        OPEN_BLOCK[open_idx],
-                        ch,
-                    ));
-                }
-                let tokens_len = tokens.len();
-                if let Token::OpenBlock { close_idx, .. } =
-                &mut tokens[open_token_idx]
-                {
-                    *close_idx = tokens_len;
-                } else {
-                    panic!("The token that was referenced in `blocks` wasn't `Token::OpenBlock`.");
-                }
-                tokens.push(Token::CloseBlock {
-                    block_level: blocks.len(),
-                    ch,
-                    open_idx: open_token_idx,
-                });
-            } else {
-                return Err(CompileError::UnexpectedClosingDelimiter(
-                    *code_pos, ch,
-                ));
-            }
-        }
-
-        *literal_type = None;
-        literal.clear();
-
-        Ok(())
-    };
 
     let mut prev_ch = ['\x00', '\x00'];
     let mut option_ch = code.next();
@@ -149,6 +209,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                             &mut literal_type,
                             &mut tokens,
                             &mut literal,
+                            &mut blocks,
                             &code_pos,
                         )?;
                         continue;
@@ -170,6 +231,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                             &mut literal_type,
                             &mut tokens,
                             &mut literal,
+                            &mut blocks,
                             &code_pos,
                         )?;
                         continue;
@@ -189,6 +251,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                             &mut literal_type,
                             &mut tokens,
                             &mut literal,
+                            &mut blocks,
                             &code_pos,
                         )?;
                         continue;
@@ -212,6 +275,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                             &mut literal_type,
                             &mut tokens,
                             &mut literal,
+                            &mut blocks,
                             &code_pos,
                         )?;
                         continue;
@@ -229,11 +293,12 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                         &mut literal_type,
                         &mut tokens,
                         &mut literal,
+                        &mut blocks,
                         &code_pos,
                     )?;
                     continue;
                 }
-                LiteralType::Str => {
+                LiteralType::Str(_) => {
                     if prev_ch[1] == '\\' && prev_ch[0] != '\\' {
                         match ch {
                             '\\' => literal.push('\\'),
@@ -250,6 +315,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                             &mut literal_type,
                             &mut tokens,
                             &mut literal,
+                            &mut blocks,
                             &code_pos,
                         )?;
                     } else if ch != '\\' {
@@ -274,7 +340,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                     literal_type = Some(LiteralType::Int);
                     literal.push(ch);
                 }
-                '"' => literal_type = Some(LiteralType::Str),
+                '"' => literal_type = Some(LiteralType::Str(code_pos)),
                 '#' => literal_type = Some(LiteralType::Comment),
                 _ => {
                     if !OPEN_BLOCK.contains(&ch)
@@ -289,6 +355,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
                             &mut literal_type,
                             &mut tokens,
                             &mut literal,
+                            &mut blocks,
                             &code_pos,
                         )?;
                     }
@@ -299,9 +366,12 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
         // `code.next` + increment code_pos
         code_pos.column += 1;
         if ch == '\n' {
+            tokens.push((Token::NewLine, Some(CodePos {
+                column: code_pos.column - 1,
+                line: code_pos.line,
+            })));
             code_pos.line += 1;
             code_pos.column = 1;
-            tokens.push(Token::NewLine)
         }
 
         prev_ch[0] = prev_ch[1];
@@ -311,7 +381,7 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
     }
 
     if let Some(some_literal_type) = &literal_type {
-        if LiteralType::Str == *some_literal_type {
+        if let LiteralType::Str(_) = some_literal_type {
             return Err(CompileError::UnclosedStringLiteral(code_pos));
         }
         push_token(
@@ -319,9 +389,25 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<Token>> {
             &mut literal_type,
             &mut tokens,
             &mut literal,
+            &mut blocks,
             &code_pos,
         )?;
     }
+
+    let tokens_len = tokens.len();
+    if let Token::OpenBlock { close_idx, .. } = &mut tokens[0].0 {
+        *close_idx = tokens_len;
+    } else {
+        panic!("Shouldn't happen!")
+    }
+    tokens.push((
+        CloseBlock {
+            block_level: 0,
+            ch: ')',
+            open_idx: 0,
+        },
+        None,
+    ));
 
     Ok(tokens)
 }

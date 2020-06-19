@@ -10,13 +10,18 @@ pub type CompileResult<T> = Result<T, CompileError>;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tokens =
-        lexer::lex(String::from_utf8(std::fs::read("file.fmt")?)?.chars())
-            .await?;
-    println!("[");
+    let tokens: std::sync::Arc<[_]> =
+        lexer::lex(std::fs::read_to_string("file.fmt")?.chars())
+            .await?
+            .into();
+    println!("tokens: [");
     for token in tokens.iter() {
         println!("\t{:?},", token);
     }
     println!("]");
+    println!();
+
+    println!("{:?}", parse::parse(0..tokens.len(), tokens, 0).await?);
+
     Ok(())
 }

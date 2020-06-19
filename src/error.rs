@@ -6,9 +6,23 @@ pub struct CodePos {
     pub column: usize,
 }
 
+impl PartialEq for CodePos {
+    fn eq(&self, other: &Self) -> bool {
+        self.line == other.line && self.column == other.column
+    }
+}
+
+impl Eq for CodePos {}
+
 impl fmt::Display for CodePos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.line, self.column)
+    }
+}
+
+impl fmt::Debug for CodePos {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
@@ -18,6 +32,8 @@ pub enum CompileError {
     MismatchedClosingDelimiter(CodePos, char, char),
     UnexpectedClosingDelimiter(CodePos, char),
     UnclosedStringLiteral(CodePos),
+    UnexpectedOperator(Option<CodePos>, String),
+    EmptyScopeBlock(Option<CodePos>),
 }
 
 impl std::error::Error for CompileError {}
@@ -50,6 +66,16 @@ impl fmt::Debug for CompileError {
             Self::UnclosedStringLiteral(pos) => {
                 write!(f, "CompileError: Unclosed string literal at {}", pos)
             }
+            Self::UnexpectedOperator(pos, op) => write!(
+                f,
+                "CompileError: Unexpected operator {} at {:?}",
+                op, pos
+            ),
+            Self::EmptyScopeBlock(pos) => write!(
+                f,
+                "CompileError: Scope block at {:?} didn't return any value",
+                pos
+            ),
         }
     }
 }

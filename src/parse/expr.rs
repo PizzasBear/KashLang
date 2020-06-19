@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Clone, Copy)]
 pub enum BinaryOperator {
     Access = 0x00,
@@ -32,6 +34,7 @@ pub enum BinaryOperator {
     BitOrSet = 0xca,
     Comma = 0xd0,
 }
+
 #[derive(Clone, Copy)]
 pub enum UnaryOperator {
     Minus = 0x10,
@@ -94,15 +97,96 @@ pub enum Literal {
     Int(i32),
     UInt(u32),
     Float(f32),
+    None,
 }
 
 pub enum Expr {
-    Fn(usize, Box<Expr>),
-    Unary(UnaryOperator, Box<Expr>),
-    Binary(BinaryOperator, Box<Expr>, Box<Expr>),
-    Group(Box<Expr>),
-    Tuple(Vec<Expr>),
-    List(Vec<Expr>),
+    /*Unary(UnaryOperator, Box<Expr>),
+    Binary(BinaryOperator, Box<Expr>, Box<Expr>),*/
     Literal(Literal),
-    None,
+    Lambda(Vec<Expr>),
+    FnCall(Box<Expr>, Vec<Expr>),
+    Scope(Vec<Expr>),
+    List(Vec<Expr>),
+    Var(String),
+}
+
+fn write_indent(f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+    for _ in 0..indent {
+        write!(f, "\t")?;
+    }
+    Ok(())
+}
+
+impl Expr {
+    fn fmt_indent(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        indent: usize,
+    ) -> fmt::Result {
+        match self {
+            Self::Literal(literal) => {
+                write!(f, "LITERAL ")?;
+                match literal {
+                    Literal::None => write!(f, "NONE"),
+                    Literal::Int(i) => write!(f, "{}", i),
+                    Literal::UInt(u) => write!(f, "{}u", u),
+                    Literal::Float(fl) => write!(f, "{}", fl),
+                    Literal::Str(s) => write!(f, "{:?}", s),
+                }?;
+            }
+            Self::Lambda(lines) => {
+                writeln!(f, "LAMBDA {{")?;
+                for expr in lines.iter() {
+                    write_indent(f, indent + 1)?;
+                    expr.fmt_indent(f, indent + 1)?;
+                    writeln!(f, ";")?;
+                }
+                write_indent(f, indent)?;
+                write!(f, "}}")?;
+            }
+            Self::Scope(lines) => {
+                writeln!(f, "SCOPE (")?;
+                for expr in lines.iter() {
+                    write_indent(f, indent + 1)?;
+                    expr.fmt_indent(f, indent + 1)?;
+                    writeln!(f, ";")?;
+                }
+                write_indent(f, indent)?;
+                write!(f, ")")?;
+            }
+            Self::FnCall(fn_expr, fn_args) => {
+                write!(f, "CALL ")?;
+                fn_expr.fmt_indent(f, indent + 1)?;
+                writeln!(f, " WITH [")?;
+                for arg in fn_args.iter() {
+                    write_indent(f, indent + 1)?;
+                    arg.fmt_indent(f, indent + 1)?;
+                    writeln!(f, ",")?;
+                }
+                write_indent(f, indent)?;
+                write!(f, "]")?;
+            }
+            Self::List(list) => {
+                writeln!(f, "LIST [")?;
+                for arg in list.iter() {
+                    write_indent(f, indent + 1)?;
+                    arg.fmt_indent(f, indent + 1)?;
+                    writeln!(f, ",")?;
+                }
+                write_indent(f, indent)?;
+                write!(f, "]")?;
+            }
+            Self::Var(var) => {
+                write!(f, "VARIABLE {}", var)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_indent(f, 0)
+    }
 }
