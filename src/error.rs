@@ -33,7 +33,6 @@ pub enum CompileError {
     UnexpectedClosingDelimiter(CodePos, char),
     UnclosedStringLiteral(CodePos),
     UnexpectedOperator(Option<CodePos>, String),
-    EmptyScopeBlock(Option<CodePos>),
 }
 
 impl std::error::Error for CompileError {}
@@ -70,11 +69,6 @@ impl fmt::Debug for CompileError {
                 f,
                 "CompileError: Unexpected operator {} at {:?}",
                 op, pos
-            ),
-            Self::EmptyScopeBlock(pos) => write!(
-                f,
-                "CompileError: Scope block at {:?} didn't return any value",
-                pos
             ),
         }
     }

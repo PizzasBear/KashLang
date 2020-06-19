@@ -61,33 +61,33 @@ fn push_token(
     if let Some(literal_type) = literal_type {
         match literal_type {
             LiteralType::Float => match literal.parse() {
-                Ok(f) => tokens
-                    .push((Token::Literal(Literal::Float(f)),
-                           Some(CodePos {
-                               column: code_pos.column - literal.len(),
-                               line: code_pos.line,
-                           }),
-                    )),
+                Ok(f) => tokens.push((
+                    Token::Literal(Literal::Float(f)),
+                    Some(CodePos {
+                        column: code_pos.column - literal.len(),
+                        line: code_pos.line,
+                    }),
+                )),
                 Err(_) => return Err(CompileError::ParseFloat(*code_pos)),
             },
             LiteralType::Int => match literal.parse() {
-                Ok(i) => tokens
-                    .push((Token::Literal(Literal::Int(i)),
-                           Some(CodePos {
-                               column: code_pos.column - literal.len(),
-                               line: code_pos.line,
-                           }),
-                    )),
+                Ok(i) => tokens.push((
+                    Token::Literal(Literal::Int(i)),
+                    Some(CodePos {
+                        column: code_pos.column - literal.len(),
+                        line: code_pos.line,
+                    }),
+                )),
                 Err(_) => return Err(CompileError::ParseInt(*code_pos)),
             },
             LiteralType::UInt => match literal.parse() {
-                Ok(u) => tokens
-                    .push((Token::Literal(Literal::UInt(u)),
-                           Some(CodePos {
-                               column: code_pos.column - literal.len() - 1,
-                               line: code_pos.line,
-                           }),
-                    )),
+                Ok(u) => tokens.push((
+                    Token::Literal(Literal::UInt(u)),
+                    Some(CodePos {
+                        column: code_pos.column - literal.len() - 1,
+                        line: code_pos.line,
+                    }),
+                )),
                 Err(_) => return Err(CompileError::ParseInt(*code_pos)),
             },
             LiteralType::Id => {
@@ -109,11 +109,13 @@ fn push_token(
                     ));
                 }
             }
-            LiteralType::Operator => tokens
-                .push((Token::Operator((*literal).clone()), Some(CodePos {
+            LiteralType::Operator => tokens.push((
+                Token::Operator((*literal).clone()),
+                Some(CodePos {
                     column: code_pos.column - literal.len(),
                     line: code_pos.line,
-                }))),
+                }),
+            )),
             LiteralType::Str(pos) => tokens.push((
                 Token::Literal(Literal::Str((*literal).clone())),
                 Some(*pos),
@@ -341,6 +343,10 @@ pub async fn lex(
                     literal.push(ch);
                 }
                 '"' => literal_type = Some(LiteralType::Str(code_pos)),
+                '@' => {
+                    literal.clear();
+                    tokens.push((Token::Id("@".to_string()), Some(code_pos)));
+                }
                 '#' => literal_type = Some(LiteralType::Comment),
                 _ => {
                     if !OPEN_BLOCK.contains(&ch)
@@ -366,10 +372,13 @@ pub async fn lex(
         // `code.next` + increment code_pos
         code_pos.column += 1;
         if ch == '\n' {
-            tokens.push((Token::NewLine, Some(CodePos {
-                column: code_pos.column - 1,
-                line: code_pos.line,
-            })));
+            tokens.push((
+                Token::NewLine,
+                Some(CodePos {
+                    column: code_pos.column - 1,
+                    line: code_pos.line,
+                }),
+            ));
             code_pos.line += 1;
             code_pos.column = 1;
         }

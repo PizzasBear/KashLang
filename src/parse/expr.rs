@@ -157,7 +157,7 @@ impl Expr {
             }
             Self::FnCall(fn_expr, fn_args) => {
                 write!(f, "CALL ")?;
-                fn_expr.fmt_indent(f, indent + 1)?;
+                fn_expr.fmt_indent(f, indent)?;
                 writeln!(f, " WITH [")?;
                 for arg in fn_args.iter() {
                     write_indent(f, indent + 1)?;

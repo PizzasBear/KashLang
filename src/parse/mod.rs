@@ -97,7 +97,7 @@ pub fn parse(
                         }
                         return Ok(Expr::List(ret));
                     }
-                    '(' => {
+                    '(' | '{' => {
                         let mut ret_handlers: Vec<
                             Vec<JoinHandle<CompileResult<Expr>>>,
                         > = vec![Vec::new()];
@@ -123,47 +123,74 @@ pub fn parse(
                             i += 1;
                         }
 
-                        return if ret_handlers.len() == 0 {
-                            Err(CompileError::EmptyScopeBlock(tokens[i].1))
+                        return Ok(if ret_handlers.len() == 0 {
+                            if ch == '(' {
+                                Expr::FnCall(
+                                    Box::new(Expr::Var("@".to_string())),
+                                    vec![Expr::Literal(Literal::None)],
+                                )
+                            } else {
+                                assert_eq!(ch, '{', "Shouldn't happen!");
+                                Expr::Lambda(vec![Expr::FnCall(
+                                    Box::new(Expr::Var("".to_string())),
+                                    vec![Expr::Literal(Literal::None)],
+                                )])
+                            }
                         } else {
                             let mut ret =
                                 Vec::with_capacity(ret_handlers.len());
                             let ret_handlers_len = ret_handlers.len();
-                            for ret_handlers in ret_handlers.iter_mut() {
+                            for (i, ret_handlers) in
+                            ret_handlers.iter_mut().enumerate()
+                            {
                                 ret_handlers.reverse();
+                                let mut none_return = i + 1 == ret_handlers_len;
                                 let fn_expr: Box<Expr> =
                                     Box::new(match ret_handlers.pop() {
                                         Some(handle) => {
+                                            none_return = false;
                                             handle.await.unwrap()?
                                         }
                                         None => {
-                                            return Err(
-                                                CompileError::EmptyScopeBlock(
-                                                    tokens[i].1,
-                                                ),
-                                            );
+                                            if none_return {
+                                                if ch == '(' {
+                                                    Expr::Var("@".to_string())
+                                                } else {
+                                                    Expr::Var("ret".to_string())
+                                                }
+                                            } else {
+                                                continue;
+                                            }
                                         }
                                     });
                                 let mut fn_args: Vec<Expr> =
                                     Vec::with_capacity(ret_handlers.len());
-                                while let Some(e) = match ret_handlers.pop() {
-                                    Some(handle) => {
-                                        Some(handle.await.unwrap()?)
+                                if none_return {
+                                    fn_args.push(Expr::Literal(Literal::None));
+                                } else {
+                                    loop {
+                                        fn_args.push(
+                                            match ret_handlers.pop() {
+                                                Some(handle) => {
+                                                    handle.await.unwrap()?
+                                                }
+                                                None => break,
+                                            },
+                                        );
                                     }
-                                    None => None,
-                                } {
-                                    fn_args.push(e);
                                 }
-                                if ret_handlers_len == 1 {
+                                if ret_handlers_len == 1 && ch != '{' {
                                     return Ok(Expr::FnCall(fn_expr, fn_args));
                                 }
                                 ret.push(Expr::FnCall(fn_expr, fn_args));
                             }
-                            Ok(Expr::Scope(ret))
-                        };
+                            match ch {
+                                '(' => Expr::Scope(ret),
+                                '{' => Expr::Lambda(ret),
+                                _ => panic!("Shouldn't happen!"),
+                            }
+                        });
                     }
-                    //TODO: impl {}
-                    '{' => { unimplemented!(); }
                     _ => panic!(
                         "The open block char '{}' isn't an open block char.",
                         ch
