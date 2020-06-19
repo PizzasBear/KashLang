@@ -33,6 +33,10 @@ pub enum CompileError {
     UnexpectedClosingDelimiter(CodePos, char),
     UnclosedStringLiteral(CodePos),
     UnexpectedOperator(Option<CodePos>, String),
+    UnexpectedBinaryOperator(Option<CodePos>, String),
+    UnexpectedUnaryOperator(Option<CodePos>, String),
+    UnknownOperator(Option<CodePos>, String),
+    ExpectedBinaryOperator(Option<CodePos>),
 }
 
 impl std::error::Error for CompileError {}
@@ -45,31 +49,36 @@ impl fmt::Display for CompileError {
 
 impl fmt::Debug for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Compile: ")?;
         match self {
-            Self::ParseFloat(pos) => {
-                write!(f, "CompileError: `ParseFloat` at {}", pos)
+            Self::ParseFloat(pos) => write!(f, "`ParseFloat` at {}", pos),
+            Self::ParseInt(pos) => write!(f, "`ParseInt` at {}", pos),
+            Self::UnexpectedClosingDelimiter(pos, ch) => {
+                write!(f, "Unexpected closing delimiter '{}' at {}", ch, pos)
             }
-            Self::ParseInt(pos) => {
-                write!(f, "CompileError: `ParseInt` at {}", pos)
-            }
-            Self::UnexpectedClosingDelimiter(pos, ch) => write!(
-                f,
-                "CompileError: Unexpected closing delimiter '{}' at {}",
-                ch, pos
-            ),
             Self::MismatchedClosingDelimiter(pos, open, close) => write!(
                 f,
-                "CompileError: Mismatched closing delimiter '{}{}' at {}",
+                "Mismatched closing delimiter '{}{}' at {}",
                 open, close, pos
             ),
             Self::UnclosedStringLiteral(pos) => {
-                write!(f, "CompileError: Unclosed string literal at {}", pos)
+                write!(f, "Unclosed string literal at {}", pos)
             }
-            Self::UnexpectedOperator(pos, op) => write!(
-                f,
-                "CompileError: Unexpected operator {} at {:?}",
-                op, pos
-            ),
+            Self::UnexpectedOperator(pos, op) => {
+                write!(f, "Unexpected operator '{}' at {:?}", op, pos)
+            }
+            Self::UnexpectedBinaryOperator(pos, op) => {
+                write!(f, "Unexpected binary operator '{}' at {:?}", op, pos)
+            }
+            Self::ExpectedBinaryOperator(pos) => {
+                write!(f, "Expected binary operator at {:?}", pos)
+            }
+            Self::UnknownOperator(pos, op) => {
+                write!(f, "Unknown operator '{}' at {:?}", op, pos)
+            }
+            Self::UnexpectedUnaryOperator(pos, op) => {
+                write!(f, "Unexpected unary operator '{}' at {:?}", op, pos)
+            }
         }
     }
 }

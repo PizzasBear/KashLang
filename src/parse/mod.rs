@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::sync::Arc;
 
 use futures::future::{BoxFuture, FutureExt};
@@ -7,6 +8,7 @@ use expr::{Expr, Literal};
 
 use crate::{CompileError, CompileResult, lexer::Token};
 use crate::error::CodePos;
+use crate::error::CompileError::ExpectedBinaryOperator;
 
 pub mod expr;
 
@@ -48,9 +50,11 @@ pub fn parse_token(
                 block_level,
             } = tokens[*token_idx + 1].0
             {
+                let tmp = *token_idx + range.start;
+                *token_idx = close_idx - range.start;
                 if ch == '(' && op == "$" {
                     return Ok(Some(spawn(parse(
-                        *token_idx..(close_idx + 1),
+                        tmp..(close_idx + 1),
                         arc_tokens.clone(),
                         block_level,
                     ))));
@@ -63,6 +67,96 @@ pub fn parse_token(
         }
         Token::NewLine => Ok(None),
     }
+}
+
+pub fn parse_math(
+    range: std::ops::Range<usize>,
+    arc_tokens: Arc<[(Token, Option<CodePos>)]>,
+    _block_level: usize,
+) -> BoxFuture<'static, CompileResult<Expr>> {
+    async move {
+        let tokens = &arc_tokens[range.clone()];
+
+        let mut i = 0;
+        let mut op = None::<(expr::Operator, usize)>;
+        let mut is_binary = false;
+        while i < tokens.len() {
+            println!("tokens[{}] = {:?}", i, tokens[i]);
+            match &tokens[i].0 {
+                Token::Operator(tmp_op_str) if tmp_op_str != "$" => {
+                    let tmp_op: expr::Operator =
+                        (tokens[i].1, tmp_op_str, is_binary).try_into()?;
+                    if let Some(op_unwrapped) = op {
+                        if op_unwrapped.0.order() < tmp_op.order() {
+                            op = Some((tmp_op, i));
+                        }
+                    } else {
+                        op = Some((tmp_op, i));
+                    }
+                    is_binary = false;
+                }
+                _ => {
+                    if is_binary {
+                        return Err(ExpectedBinaryOperator(
+                            tokens[i].1.clone(),
+                        ));
+                    }
+                    match &tokens[i].0 {
+                        Token::OpenBlock {
+                            close_idx,
+                            ..
+                        } => i = *close_idx - range.start,
+                        Token::CloseBlock { .. } => {
+                            panic!("Close block should be skipped.");
+                        }
+                        Token::Operator(_) => {
+                            if let Token::OpenBlock {
+                                ch,
+                                close_idx,
+                                ..
+                            } = tokens[i + 1].0
+                            {
+                                if ch == '(' {
+                                    i = close_idx - range.start;
+                                }
+                            } else {
+                                return Err(CompileError::UnexpectedOperator(
+                                    tokens[i].1.clone(),
+                                    "$".to_string(),
+                                ));
+                            }
+                        }
+                        _ => {}
+                    }
+                    is_binary = true;
+                }
+            }
+
+            i += 1;
+        }
+
+        if let Some((op, i)) = op {
+            if op.is_unary() {
+                Ok(Expr::FnCall(
+                    Box::new(Expr::Var(op.to_fn().to_string())),
+                    vec![
+                        parse((range.start + 1)..range.end, arc_tokens, _block_level).await?
+                    ],
+                ))
+            } else {
+                let arg1 = spawn(parse_math(range.start..(range.start + i), arc_tokens.clone(), _block_level));
+                let arg2 = spawn(parse_math((range.start + i + 1)..range.end, arc_tokens, _block_level));
+                Ok(Expr::FnCall(
+                    Box::new(Expr::Var(op.to_fn().to_string())),
+                    vec![arg1.await.unwrap()?, arg2.await.unwrap()?],
+                ))
+            }
+        } else {
+            parse_token(&mut 0, arc_tokens, range)?.unwrap().await.unwrap()
+            // (range, arc_tokens, _block_level).await
+        }
+    }
+        .boxed()
 }
 
 pub fn parse(
@@ -86,7 +180,7 @@ pub fn parse(
                                 arc_tokens.clone(),
                                 range.clone(),
                             )? {
-                                ret_handlers.push(expr_future)
+                                ret_handlers.push(expr_future);
                             }
                             i += 1;
                         }
@@ -116,7 +210,7 @@ pub fn parse(
                                         ret_handlers
                                             .last_mut()
                                             .unwrap()
-                                            .push(expr_future)
+                                            .push(expr_future);
                                     }
                                 }
                             }
@@ -198,13 +292,24 @@ pub fn parse(
                 }
             }
         }
-        // let mut i = 0;
-        // while i < tokens.len() {
-        //     if let tokens
-        //
-        //     i += 1;
-        // }
-        Ok(Expr::Literal(Literal::Int(0)))
+        if let (
+            Token::Operator(op),
+            Token::OpenBlock {
+                close_idx,
+                block_level,
+                ..
+            },
+        ) = (&tokens[0].0, &tokens[1].0)
+        {
+            if op == "$" && close_idx + 1 == range.end {
+                return parse_math(
+                    (range.start + 2)..(range.end - 1),
+                    arc_tokens.clone(),
+                    *block_level,
+                ).await;
+            }
+        }
+        Ok(Expr::Literal(Literal::Int(404)))
     }
         .boxed()
 }

@@ -1,92 +1,107 @@
 use std::fmt;
 
-#[derive(Clone, Copy)]
-pub enum BinaryOperator {
-    Access = 0x00,
-    Mul = 0x20,
-    Div = 0x21,
-    Mod = 0x22,
-    Add = 0x30,
-    Sub = 0x31,
-    ShiftLeft = 0x40,
-    ShiftRight = 0x41,
-    Less = 0x50,
-    Greater = 0x51,
-    LessEq = 0x52,
-    GreaterEq = 0x53,
-    Equals = 0x60,
-    NotEq = 0x61,
-    BitAnd = 0x70,
-    BitXor = 0x80,
-    BitOr = 0x90,
-    And = 0xa0,
-    Or = 0xb0,
-    Set = 0xc0,
-    AddSet = 0xc1,
-    SubSet = 0xc2,
-    MulSet = 0xc3,
-    DivSet = 0xc4,
-    ModSet = 0xc5,
-    ShiftLeftSet = 0xc6,
-    ShiftRightSet = 0xc7,
-    BitAndSet = 0xc8,
-    BitXorSet = 0xc9,
-    BitOrSet = 0xca,
-    Comma = 0xd0,
-}
+use crate::CompileError;
+use crate::error::CodePos;
 
 #[derive(Clone, Copy)]
-pub enum UnaryOperator {
-    Minus = 0x10,
-    Not = 0x11,
-    Deref = 0x12,
-    Mem = 0x13,
+pub enum Operator {
+    Neg = 0x00,
+    Not = 0x01,
+    Mul = 0x10,
+    Div = 0x11,
+    Mod = 0x12,
+    Add = 0x20,
+    Sub = 0x21,
+    ShiftLeft = 0x30,
+    ShiftRight = 0x31,
+    Less = 0x40,
+    Greater = 0x41,
+    LessEq = 0x42,
+    GreaterEq = 0x43,
+    Equals = 0x50,
+    NotEq = 0x51,
+    BitAnd = 0x60,
+    BitXor = 0x70,
+    BitOr = 0x80,
+    And = 0x90,
+    Or = 0xa0,
 }
 
-impl BinaryOperator {
+impl Operator {
     pub fn order(&self) -> usize {
         *self as usize >> 4
     }
-}
-impl UnaryOperator {
-    pub fn order(&self) -> usize {
-        *self as usize >> 4
-    }
-}
 
-impl std::convert::TryFrom<String> for BinaryOperator {
-    type Error = ();
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        use std::convert::TryInto;
-        s.as_str().try_into()
+    pub fn is_unary(&self) -> bool {
+        self.order() == 0
     }
-}
-impl std::convert::TryFrom<String> for UnaryOperator {
-    type Error = ();
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        use std::convert::TryInto;
-        s.as_str().try_into()
-    }
-}
 
-impl<'a> std::convert::TryFrom<&'a str> for BinaryOperator {
-    type Error = ();
-    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-        match s {
-            "+" => Ok(Self::Add),
-            "-" => Ok(Self::Sub),
-            "*" => Ok(Self::Mul),
-            "/" => Ok(Self::Div),
-            _ => Err(()),
+    pub fn is_binary(&self) -> bool {
+        !self.is_unary()
+    }
+
+    pub fn to_fn(&self) -> &'_ str {
+        match self {
+            Self::Neg => "neg",
+            Self::Not => "not",
+            Self::Mul => "mul",
+            Self::Div => "div",
+            Self::Mod => "mod",
+            Self::Add => "add",
+            Self::Sub => "sub",
+            Self::ShiftLeft => "shift_left",
+            Self::ShiftRight => "shift_right",
+            Self::Less => "less",
+            Self::Greater => "greater",
+            Self::LessEq => "less_eq",
+            Self::GreaterEq => "greater_eq",
+            Self::Equals => "eq",
+            Self::NotEq => "not_eq",
+            Self::BitAnd => "bit_and",
+            Self::BitXor => "bit_xor",
+            Self::BitOr => "bit_or",
+            Self::And => "and",
+            Self::Or => "or",
         }
     }
 }
-impl<'a> std::convert::TryFrom<&'a str> for UnaryOperator {
-    type Error = ();
-    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-        match s {
-            "!" => Ok(Self::Not),
-            _ => Err(()),
+
+impl<'a> std::convert::TryFrom<(Option<CodePos>, &String, bool)> for Operator {
+    type Error = CompileError;
+    fn try_from(
+        (pos, s, is_binary): (Option<CodePos>, &String, bool),
+    ) -> Result<Self, Self::Error> {
+        if is_binary {
+            match s.as_str() {
+                "*" => Ok(Self::Mul),
+                "/" => Ok(Self::Div),
+                "%" => Ok(Self::Mod),
+                "+" => Ok(Self::Add),
+                "-" => Ok(Self::Sub),
+                "<<" => Ok(Self::ShiftLeft),
+                ">>" => Ok(Self::ShiftRight),
+                "<" => Ok(Self::Less),
+                ">" => Ok(Self::Greater),
+                "<=" => Ok(Self::LessEq),
+                ">=" => Ok(Self::GreaterEq),
+                "==" => Ok(Self::Equals),
+                "!=" => Ok(Self::NotEq),
+                "&" => Ok(Self::BitAnd),
+                "^" => Ok(Self::BitXor),
+                "|" => Ok(Self::BitOr),
+                "&&" => Ok(Self::And),
+                "||" => Ok(Self::Or),
+                "!" => {
+                    Err(CompileError::UnexpectedBinaryOperator(pos, s.clone()))
+                }
+                _ => Err(CompileError::UnknownOperator(pos, s.clone())),
+            }
+        } else {
+            match s.as_str() {
+                "-" => Ok(Self::Neg),
+                "!" => Ok(Self::Not),
+                _ => Err(CompileError::UnexpectedOperator(pos, s.clone())),
+            }
         }
     }
 }
@@ -97,12 +112,11 @@ pub enum Literal {
     Int(i32),
     UInt(u32),
     Float(f32),
+    Bool(bool),
     None,
 }
 
 pub enum Expr {
-    /*Unary(UnaryOperator, Box<Expr>),
-    Binary(BinaryOperator, Box<Expr>, Box<Expr>),*/
     Literal(Literal),
     Lambda(Vec<Expr>),
     FnCall(Box<Expr>, Vec<Expr>),
@@ -133,6 +147,8 @@ impl Expr {
                     Literal::UInt(u) => write!(f, "{}u", u),
                     Literal::Float(fl) => write!(f, "{}", fl),
                     Literal::Str(s) => write!(f, "{:?}", s),
+                    Literal::Bool(true) => write!(f, "TRUE"),
+                    Literal::Bool(false) => write!(f, "FALSE"),
                 }?;
             }
             Self::Lambda(lines) => {
