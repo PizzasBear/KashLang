@@ -109,7 +109,7 @@ pub fn parse_math(
                         }
                         Token::Operator(_) => {
                             if let Token::OpenBlock { ch, close_idx, .. } =
-                            tokens[i + 1].0
+                                tokens[i + 1].0
                             {
                                 if ch == '(' || ch == '{' {
                                     i = close_idx - range.start;
@@ -278,7 +278,26 @@ pub fn parse(
                                 let mut fn_args: Vec<Expr> =
                                     Vec::with_capacity(ret_handlers.len());
                                 if none_return {
-                                    fn_args.push(Expr::Var("none".to_string()));
+                                    // if ch == '{' {
+                                    //     // Default return mods
+                                    //     fn_args.push(Expr::Var(
+                                    //         "none".to_string(),
+                                    //     ));
+                                    // } else {
+                                    //     fn_args.push(Expr::Lambda(vec![
+                                    //         Expr::FnCall(
+                                    //             Box::new(Expr::Var(
+                                    //                 "ret".to_string(),
+                                    //             )),
+                                    //             vec![Expr::Var(
+                                    //                 "none".to_string(),
+                                    //             )],
+                                    //         ),
+                                    //     ]));
+                                    // }
+                                    fn_args.push(Expr::Var(
+                                        "none".to_string(),
+                                    ));
                                 } else {
                                     loop {
                                         fn_args.push(

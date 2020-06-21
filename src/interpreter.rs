@@ -310,10 +310,10 @@ fn override_var(
 ) -> RuntimeResult<()> {
     if let Some(var_override_stack) = vars.get_mut(name) {
         var_override_stack.push(data);
-        scope_vars.push(name.clone());
     } else {
         vars.insert(name.clone(), vec![data]);
     }
+    scope_vars.push(name.clone());
     Ok(())
 }
 
@@ -377,7 +377,8 @@ fn call(
             let mut val = (false, Data::None);
             // Exprs
             for expr in exprs.iter() {
-                val = interpret(expr, vars, &mut lambda_scope_vars)?;
+                val =
+                    interpret(expr, &mut lambda_vars, &mut lambda_scope_vars)?;
                 if val.0 {
                     break;
                 }
