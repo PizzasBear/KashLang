@@ -4,7 +4,7 @@ use std::sync::Arc;
 use futures::future::{BoxFuture, FutureExt};
 use tokio::task::{JoinHandle, spawn};
 
-use expr::{Expr, Literal};
+use expr::Expr;
 
 use crate::{CompileError, CompileResult, lexer::Token};
 use crate::error::CodePos;
@@ -52,7 +52,7 @@ pub fn parse_token(
             {
                 let tmp = *token_idx + range.start;
                 *token_idx = close_idx - range.start;
-                if ch == '(' && op == "$" {
+                if (ch == '(' || ch == '{') && op == "$" {
                     return Ok(Some(spawn(parse(
                         tmp..(close_idx + 1),
                         arc_tokens.clone(),
@@ -81,7 +81,6 @@ pub fn parse_math(
         let mut op = None::<(expr::Operator, usize)>;
         let mut is_binary = false;
         while i < tokens.len() {
-            println!("tokens[{}] = {:?}", i, tokens[i]);
             match &tokens[i].0 {
                 Token::Operator(tmp_op_str) if tmp_op_str != "$" => {
                     let tmp_op: expr::Operator =
@@ -102,22 +101,25 @@ pub fn parse_math(
                         ));
                     }
                     match &tokens[i].0 {
-                        Token::OpenBlock {
-                            close_idx,
-                            ..
-                        } => i = *close_idx - range.start,
+                        Token::OpenBlock { close_idx, .. } => {
+                            i = *close_idx - range.start
+                        }
                         Token::CloseBlock { .. } => {
                             panic!("Close block should be skipped.");
                         }
                         Token::Operator(_) => {
-                            if let Token::OpenBlock {
-                                ch,
-                                close_idx,
-                                ..
-                            } = tokens[i + 1].0
+                            if let Token::OpenBlock { ch, close_idx, .. } =
+                            tokens[i + 1].0
                             {
-                                if ch == '(' {
+                                if ch == '(' || ch == '{' {
                                     i = close_idx - range.start;
+                                } else {
+                                    return Err(
+                                        CompileError::UnexpectedOperator(
+                                            tokens[i].1.clone(),
+                                            "$".to_string(),
+                                        ),
+                                    );
                                 }
                             } else {
                                 return Err(CompileError::UnexpectedOperator(
@@ -140,19 +142,35 @@ pub fn parse_math(
                 Ok(Expr::FnCall(
                     Box::new(Expr::Var(op.to_fn().to_string())),
                     vec![
-                        parse((range.start + 1)..range.end, arc_tokens, _block_level).await?
+                        parse(
+                            (range.start + 1)..range.end,
+                            arc_tokens,
+                            _block_level,
+                        )
+                            .await?,
                     ],
                 ))
             } else {
-                let arg1 = spawn(parse_math(range.start..(range.start + i), arc_tokens.clone(), _block_level));
-                let arg2 = spawn(parse_math((range.start + i + 1)..range.end, arc_tokens, _block_level));
+                let arg1 = spawn(parse_math(
+                    range.start..(range.start + i),
+                    arc_tokens.clone(),
+                    _block_level,
+                ));
+                let arg2 = spawn(parse_math(
+                    (range.start + i + 1)..range.end,
+                    arc_tokens,
+                    _block_level,
+                ));
                 Ok(Expr::FnCall(
                     Box::new(Expr::Var(op.to_fn().to_string())),
                     vec![arg1.await.unwrap()?, arg2.await.unwrap()?],
                 ))
             }
         } else {
-            parse_token(&mut 0, arc_tokens, range)?.unwrap().await.unwrap()
+            parse_token(&mut 0, arc_tokens, range)?
+                .unwrap()
+                .await
+                .unwrap()
             // (range, arc_tokens, _block_level).await
         }
     }
@@ -221,13 +239,13 @@ pub fn parse(
                             if ch == '(' {
                                 Expr::FnCall(
                                     Box::new(Expr::Var("@".to_string())),
-                                    vec![Expr::Literal(Literal::None)],
+                                    vec![Expr::Var("none".to_string())],
                                 )
                             } else {
                                 assert_eq!(ch, '{', "Shouldn't happen!");
                                 Expr::Lambda(vec![Expr::FnCall(
-                                    Box::new(Expr::Var("".to_string())),
-                                    vec![Expr::Literal(Literal::None)],
+                                    Box::new(Expr::Var("@".to_string())),
+                                    vec![Expr::Var("none".to_string())],
                                 )])
                             }
                         } else {
@@ -260,7 +278,7 @@ pub fn parse(
                                 let mut fn_args: Vec<Expr> =
                                     Vec::with_capacity(ret_handlers.len());
                                 if none_return {
-                                    fn_args.push(Expr::Literal(Literal::None));
+                                    fn_args.push(Expr::Var("none".to_string()));
                                 } else {
                                     loop {
                                         fn_args.push(
@@ -297,19 +315,24 @@ pub fn parse(
             Token::OpenBlock {
                 close_idx,
                 block_level,
-                ..
+                ch,
             },
         ) = (&tokens[0].0, &tokens[1].0)
         {
             if op == "$" && close_idx + 1 == range.end {
-                return parse_math(
+                let res = parse_math(
                     (range.start + 2)..(range.end - 1),
                     arc_tokens.clone(),
                     *block_level,
-                ).await;
+                )
+                    .await?;
+                if *ch == '{' {
+                    return Ok(Expr::Lambda(vec![res]));
+                }
+                return Ok(res);
             }
         }
-        Ok(Expr::Literal(Literal::Int(404)))
+        panic!("Shouldn't happen")
     }
         .boxed()
 }

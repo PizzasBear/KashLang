@@ -56,7 +56,7 @@ impl Operator {
             Self::LessEq => "less_eq",
             Self::GreaterEq => "greater_eq",
             Self::Equals => "eq",
-            Self::NotEq => "not_eq",
+            Self::NotEq => "diff",
             Self::BitAnd => "bit_and",
             Self::BitXor => "bit_xor",
             Self::BitOr => "bit_or",
@@ -84,7 +84,7 @@ impl<'a> std::convert::TryFrom<(Option<CodePos>, &String, bool)> for Operator {
                 ">" => Ok(Self::Greater),
                 "<=" => Ok(Self::LessEq),
                 ">=" => Ok(Self::GreaterEq),
-                "==" => Ok(Self::Equals),
+                "=" => Ok(Self::Equals),
                 "!=" => Ok(Self::NotEq),
                 "&" => Ok(Self::BitAnd),
                 "^" => Ok(Self::BitXor),
@@ -112,10 +112,9 @@ pub enum Literal {
     Int(i32),
     UInt(u32),
     Float(f32),
-    Bool(bool),
-    None,
 }
 
+#[derive(Clone)]
 pub enum Expr {
     Literal(Literal),
     Lambda(Vec<Expr>),
@@ -142,13 +141,10 @@ impl Expr {
             Self::Literal(literal) => {
                 write!(f, "LITERAL ")?;
                 match literal {
-                    Literal::None => write!(f, "NONE"),
                     Literal::Int(i) => write!(f, "{}", i),
                     Literal::UInt(u) => write!(f, "{}u", u),
-                    Literal::Float(fl) => write!(f, "{}", fl),
+                    Literal::Float(fl) => write!(f, "{}f", fl),
                     Literal::Str(s) => write!(f, "{:?}", s),
-                    Literal::Bool(true) => write!(f, "TRUE"),
-                    Literal::Bool(false) => write!(f, "FALSE"),
                 }?;
             }
             Self::Lambda(lines) => {

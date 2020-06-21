@@ -91,36 +91,13 @@ fn push_token(
                 Err(_) => return Err(CompileError::ParseInt(*code_pos)),
             },
             LiteralType::Id => {
-                tokens.push(match literal.as_str() {
-                    "none" => (
-                        Token::Literal(Literal::None),
-                        Some(CodePos {
-                            column: code_pos.column - 4,
-                            line: code_pos.line,
-                        }),
-                    ),
-                    "false" => (
-                        Token::Literal(Literal::Bool(false)),
-                        Some(CodePos {
-                            column: code_pos.column - 5,
-                            line: code_pos.line,
-                        }),
-                    ),
-                    "true" => (
-                        Token::Literal(Literal::Bool(true)),
-                        Some(CodePos {
-                            column: code_pos.column - 4,
-                            line: code_pos.line,
-                        }),
-                    ),
-                    _ => (
-                        Token::Id((*literal).clone()),
-                        Some(CodePos {
-                            column: code_pos.column - literal.len(),
-                            line: code_pos.line,
-                        }),
-                    ),
-                });
+                tokens.push((
+                    Token::Id((*literal).clone()),
+                    Some(CodePos {
+                        column: code_pos.column - literal.len(),
+                        line: code_pos.line,
+                    }),
+                ));
             }
             LiteralType::Operator => tokens.push((
                 Token::Operator((*literal).clone()),
