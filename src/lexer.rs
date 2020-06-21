@@ -251,26 +251,42 @@ pub async fn lex(
                 },
                 LiteralType::Int => match ch {
                     '0'..='9' => literal.push(ch),
-                    '.' => {
-                        literal.push(ch);
-                        literal_type = Some(LiteralType::Float);
-                    }
-                    'u' => literal_type = Some(LiteralType::UInt),
-                    'f' => literal_type = Some(LiteralType::Float),
                     _ => {
-                        if ('a'..='z').contains(&ch) | ('A'..='Z').contains(&ch)
-                        {
-                            return Err(CompileError::ParseInt(code_pos));
+                        if literal == "-" {
+                            tokens.push((
+                                Token::Operator("-".to_string()),
+                                Some(code_pos),
+                            ));
+                            literal.clear();
+                            literal_type = None;
+                            continue;
                         }
-                        push_token(
-                            ch,
-                            &mut literal_type,
-                            &mut tokens,
-                            &mut literal,
-                            &mut blocks,
-                            &code_pos,
-                        )?;
-                        continue;
+                        match ch {
+                            '.' => {
+                                literal.push(ch);
+                                literal_type = Some(LiteralType::Float);
+                            }
+                            'u' => literal_type = Some(LiteralType::UInt),
+                            'f' => literal_type = Some(LiteralType::Float),
+                            _ => {
+                                if ('a'..='z').contains(&ch)
+                                    | ('A'..='Z').contains(&ch)
+                                {
+                                    return Err(CompileError::ParseInt(
+                                        code_pos,
+                                    ));
+                                }
+                                push_token(
+                                    ch,
+                                    &mut literal_type,
+                                    &mut tokens,
+                                    &mut literal,
+                                    &mut blocks,
+                                    &code_pos,
+                                )?;
+                                continue;
+                            }
+                        }
                     }
                 },
                 LiteralType::UInt => {
@@ -328,7 +344,7 @@ pub async fn lex(
                     literal_type = Some(LiteralType::Id);
                     literal.push(ch);
                 }
-                '0'..='9' => {
+                '0'..='9' | '-' => {
                     literal_type = Some(LiteralType::Int);
                     literal.push(ch);
                 }

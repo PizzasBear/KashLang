@@ -339,12 +339,12 @@ fn call(
     vars: &mut HashMap<String, Vec<Rc<RefCell<Data>>>>,
     scope_vars: &mut Vec<String>,
 ) -> RuntimeResult<(bool, Data)> {
-    let fn_name = interpret(fn_name, vars, scope_vars)?;
+    let mut fn_name = interpret(fn_name, vars, scope_vars)?;
     if fn_name.0 {
         return Ok(fn_name);
     }
-    match fn_name.1 {
-        Data::Lambda(exprs, lambda_args, mut lambda_vars) => {
+    match &mut fn_name.1 {
+        Data::Lambda(exprs, lambda_args, lambda_vars) => {
             // Arguments
             if lambda_args.len() != args.len() {
                 return Err(RuntimeError::MismatchedParameterCount(
@@ -362,7 +362,7 @@ fn call(
                     || lambda_args[i].1 == DataType::Any
                 {
                     override_var(
-                        &mut lambda_vars,
+                        lambda_vars,
                         &lambda_args[i].0,
                         Rc::new(RefCell::new(arg.1)),
                         &mut lambda_scope_vars,
@@ -378,7 +378,7 @@ fn call(
             // Exprs
             for expr in exprs.iter() {
                 val =
-                    interpret(expr, &mut lambda_vars, &mut lambda_scope_vars)?;
+                    interpret(expr, lambda_vars, &mut lambda_scope_vars)?;
                 if val.0 {
                     break;
                 }
@@ -437,8 +437,10 @@ fn call(
                     }
                     _ => Err(RuntimeError::CallListNotRight),
                 }
+            } else if args.len() == 0 {
+                Ok(fn_name)
             } else {
-                return Err(RuntimeError::CallListNotRight);
+                Err(RuntimeError::CallListNotRight)
             }
         }
         Data::CoreFn(core_fn_type) => {
@@ -485,7 +487,7 @@ fn call(
                             return Ok(val);
                         }
                         if let Some(var) = vars.get_mut(&s) {
-                            *(var.last().unwrap().borrow_mut()) = val.1;
+                            *var.last().unwrap().borrow_mut() = val.1;
                             Ok((false, Data::None))
                         } else {
                             Err(RuntimeError::VarIsNotDefined(s))
@@ -505,7 +507,7 @@ fn call(
                     if let Data::Bool(b) = arg.1 {
                         if b {
                             call(&args[1], &[], vars, scope_vars)
-                        } else if CoreFnType::IfElse == core_fn_type {
+                        } else if CoreFnType::IfElse == *core_fn_type {
                             call(&args[2], &[], vars, scope_vars)
                         } else {
                             Ok((false, Data::None))
@@ -1050,7 +1052,20 @@ fn call(
                 }
             }
         }
-        _ => Err(RuntimeError::NotCallableDataType(fn_name.1.data_type())),
+        Data::Str(_)
+        | Data::Int(_)
+        | Data::UInt(_)
+        | Data::None
+        | Data::Float(_)
+        | Data::DataType(_)
+        | Data::Bool(_) => {
+            if args.len() == 0 {
+                Ok(fn_name)
+            } else {
+                Err(RuntimeError::MismatchedParameterCount(0, args.len()))
+            }
+        }
+        // _ => Err(RuntimeError::NotCallableDataType(fn_name.1.data_type())),
     }
 }
 

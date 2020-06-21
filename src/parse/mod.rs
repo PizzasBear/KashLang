@@ -8,7 +8,6 @@ use expr::Expr;
 
 use crate::{CompileError, CompileResult, lexer::Token};
 use crate::error::CodePos;
-use crate::error::CompileError::ExpectedBinaryOperator;
 
 pub mod expr;
 
@@ -96,7 +95,7 @@ pub fn parse_math(
                 }
                 _ => {
                     if is_binary {
-                        return Err(ExpectedBinaryOperator(
+                        return Err(CompileError::ExpectedBinaryOperator(
                             tokens[i].1.clone(),
                         ));
                     }
@@ -139,16 +138,21 @@ pub fn parse_math(
 
         if let Some((op, i)) = op {
             if op.is_unary() {
+                let mut val;
+                let mut i = 0;
+                while let None = {
+                    val = parse_token(
+                        &mut i,
+                        arc_tokens.clone(),
+                        (range.start + 1)..range.end,
+                    )?;
+                    i += 1;
+                    &val
+                } {}
+
                 Ok(Expr::FnCall(
                     Box::new(Expr::Var(op.to_fn().to_string())),
-                    vec![
-                        parse(
-                            (range.start + 1)..range.end,
-                            arc_tokens,
-                            _block_level,
-                        )
-                            .await?,
-                    ],
+                    vec![val.unwrap().await.unwrap()?],
                 ))
             } else {
                 let arg1 = spawn(parse_math(
@@ -295,9 +299,7 @@ pub fn parse(
                                     //         ),
                                     //     ]));
                                     // }
-                                    fn_args.push(Expr::Var(
-                                        "none".to_string(),
-                                    ));
+                                    fn_args.push(Expr::Var("none".to_string()));
                                 } else {
                                     loop {
                                         fn_args.push(
