@@ -16,10 +16,9 @@ pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tokens: std::sync::Arc<[_]> =
-        lexer::lex(std::fs::read_to_string("file.fmt")?.chars())
-            .await?
-            .into();
+    let tokens: std::sync::Arc<[_]> = lexer::lex(std::fs::read_to_string("file.fmt")?.chars())
+        .await?
+        .into();
     println!("tokens: [");
     for token in tokens.iter() {
         println!("\t{:?},", token);

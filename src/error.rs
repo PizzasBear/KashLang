@@ -64,21 +64,15 @@ impl fmt::Debug for CompileError {
                 "Mismatched closing delimiter '{}{}' at {}.",
                 open, close, pos
             ),
-            Self::UnclosedStringLiteral(pos) => {
-                write!(f, "Unclosed string literal at {}.", pos)
-            }
+            Self::UnclosedStringLiteral(pos) => write!(f, "Unclosed string literal at {}.", pos),
             Self::UnexpectedOperator(pos, op) => {
                 write!(f, "Unexpected operator '{}' at {}.", op, pos)
             }
             Self::UnexpectedBinaryOperator(pos, op) => {
                 write!(f, "Unexpected binary operator '{}' at {}.", op, pos)
             }
-            Self::ExpectedBinaryOperator(pos) => {
-                write!(f, "Expected binary operator at {}.", pos)
-            }
-            Self::UnknownOperator(pos, op) => {
-                write!(f, "Unknown operator '{}' at {}.", op, pos)
-            }
+            Self::ExpectedBinaryOperator(pos) => write!(f, "Expected binary operator at {}.", pos),
+            Self::UnknownOperator(pos, op) => write!(f, "Unknown operator '{}' at {}.", op, pos),
             Self::UnexpectedUnaryOperator(pos, op) => {
                 write!(f, "Unexpected unary operator '{}' at {}.", op, pos)
             }
@@ -96,6 +90,7 @@ pub enum RuntimeError {
     IncorrectListLambdaSyntax(CodePos),
     VarIsNotDefined(CodePos, String),
     ConvertError(CodePos, DataType, DataType),
+    RedefinedVariableInTheSameScope(CodePos, String),
 }
 
 impl Error for RuntimeError {}
@@ -122,18 +117,36 @@ impl fmt::Debug for RuntimeError {
             ),
             Self::CallListNotRight(pos) => write!(
                 f,
-                "Called list not for indexing, creating lambdas or data duplication at {}.", pos
+                "Called list not for indexing, creating lambdas or data duplication at {}.",
+                pos
             ),
-            Self::IncorrectListLambdaSyntax(pos) => {
-                write!(f, "Lambda argument list has incorrect structure at {}.", pos)
-            }
+            Self::IncorrectListLambdaSyntax(pos) => write!(
+                f,
+                "Lambda argument list has incorrect structure at {}.",
+                pos
+            ),
             Self::VarIsNotDefined(pos, var) => {
                 write!(f, "The variable `{}` isn't defined at {}.", var, pos)
             }
-            Self::ConvertError(pos, into, from) => write!(f, "Can't convert {} into {} at {}.", from, into, pos),
-            Self::ExpectedNumber(pos, found) => write!(f, "Expected number but found {} at {}.", found, pos),
-            Self::ExpectedSignedNumber(pos, found) => write!(f, "Expected signed number but found {} at {}.", found, pos),
-            Self::ExpectedInteger(pos, found) => write!(f, "Expected an integer type but found {} at {}.", found, pos),
+            Self::ConvertError(pos, into, from) => {
+                write!(f, "Can't convert {} into {} at {}.", from, into, pos)
+            }
+            Self::ExpectedNumber(pos, found) => {
+                write!(f, "Expected number but found {} at {}.", found, pos)
+            }
+            Self::ExpectedSignedNumber(pos, found) => {
+                write!(f, "Expected signed number but found {} at {}.", found, pos)
+            }
+            Self::ExpectedInteger(pos, found) => write!(
+                f,
+                "Expected an integer type but found {} at {}.",
+                found, pos
+            ),
+            Self::RedefinedVariableInTheSameScope(pos, name) => write!(
+                f,
+                "Redefined variable '{}' at the same scope it was defined in, at {}.",
+                name, pos
+            ),
         }
     }
 }

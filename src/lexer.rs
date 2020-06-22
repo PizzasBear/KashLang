@@ -106,13 +106,10 @@ fn push_token(
                     line: code_pos.line,
                 },
             )),
-            LiteralType::Str(pos) => tokens.push((
-                Token::Literal(Literal::Str((*literal).clone())),
-                *pos,
-            )),
-            LiteralType::Comment => {
-                panic!("Comment token should never be pushed.")
+            LiteralType::Str(pos) => {
+                tokens.push((Token::Literal(Literal::Str((*literal).clone())), *pos))
             }
+            LiteralType::Comment => panic!("Comment token should never be pushed."),
         }
     } else if let Some(open_idx) = where_contains(&OPEN_BLOCK, &ch) {
         blocks.push((tokens.len(), open_idx));
@@ -134,9 +131,7 @@ fn push_token(
                 ));
             }
             let tokens_len = tokens.len();
-            if let Token::OpenBlock { close_idx, .. } =
-            &mut tokens[open_token_idx].0
-            {
+            if let Token::OpenBlock { close_idx, .. } = &mut tokens[open_token_idx].0 {
                 *close_idx = tokens_len;
             } else {
                 panic!("The token that was referenced in `blocks` wasn't `Token::OpenBlock`.");
@@ -150,9 +145,7 @@ fn push_token(
                 *code_pos,
             ));
         } else {
-            return Err(CompileError::UnexpectedClosingDelimiter(
-                *code_pos, ch,
-            ));
+            return Err(CompileError::UnexpectedClosingDelimiter(*code_pos, ch));
         }
     }
 
@@ -162,19 +155,14 @@ fn push_token(
     Ok(())
 }
 
-pub async fn lex(
-    mut code: Chars<'_>,
-) -> CompileResult<Vec<(Token, CodePos)>> {
+pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<(Token, CodePos)>> {
     let mut tokens = vec![(
         Token::OpenBlock {
             block_level: 0,
             ch: '(',
             close_idx: 0,
         },
-        CodePos {
-            line: 0,
-            column: 0,
-        },
+        CodePos { line: 0, column: 0 },
     )];
     let mut literal = String::new();
     let mut literal_type = None::<LiteralType>;
@@ -237,8 +225,7 @@ pub async fn lex(
                 LiteralType::Float => match ch {
                     '0'..='9' => literal.push(ch),
                     _ => {
-                        if ('a'..='z').contains(&ch) | ('A'..='Z').contains(&ch)
-                        {
+                        if ('a'..='z').contains(&ch) | ('A'..='Z').contains(&ch) {
                             return Err(CompileError::ParseInt(code_pos));
                         }
                         push_token(
@@ -256,10 +243,7 @@ pub async fn lex(
                     '0'..='9' => literal.push(ch),
                     _ => {
                         if literal == "-" {
-                            tokens.push((
-                                Token::Operator("-".to_string()),
-                                code_pos,
-                            ));
+                            tokens.push((Token::Operator("-".to_string()), code_pos));
                             literal.clear();
                             literal_type = None;
                             continue;
@@ -272,12 +256,8 @@ pub async fn lex(
                             'u' => literal_type = Some(LiteralType::UInt),
                             'f' => literal_type = Some(LiteralType::Float),
                             _ => {
-                                if ('a'..='z').contains(&ch)
-                                    | ('A'..='Z').contains(&ch)
-                                {
-                                    return Err(CompileError::ParseInt(
-                                        code_pos,
-                                    ));
+                                if ('a'..='z').contains(&ch) | ('A'..='Z').contains(&ch) {
+                                    return Err(CompileError::ParseInt(code_pos));
                                 }
                                 push_token(
                                     ch,
@@ -424,10 +404,7 @@ pub async fn lex(
             ch: ')',
             open_idx: 0,
         },
-        CodePos {
-            line: 0,
-            column: 0,
-        },
+        CodePos { line: 0, column: 0 },
     ));
 
     Ok(tokens)

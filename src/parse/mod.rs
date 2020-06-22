@@ -37,7 +37,9 @@ pub fn parse_token(
         Token::Literal(literal) => {
             let literal = literal.clone();
             let pos = tokens[*token_idx].1;
-            Ok(Some(spawn(async move { Ok(Expr(pos, ExprType::Literal(literal))) })))
+            Ok(Some(spawn(async move {
+                Ok(Expr(pos, ExprType::Literal(literal)))
+            })))
         }
         Token::Id(id) => {
             let id = id.clone();
@@ -84,8 +86,7 @@ pub fn parse_math(
         while i < tokens.len() {
             match &tokens[i].0 {
                 Token::Operator(tmp_op_str) if tmp_op_str != "$" => {
-                    let tmp_op: expr::Operator =
-                        (tokens[i].1, tmp_op_str, is_binary).try_into()?;
+                    let tmp_op: expr::Operator = (tokens[i].1, tmp_op_str, is_binary).try_into()?;
                     if let Some(op_unwrapped) = op {
                         if op_unwrapped.0.order() < tmp_op.order() {
                             op = Some((tmp_op, i));
@@ -97,30 +98,22 @@ pub fn parse_math(
                 }
                 _ => {
                     if is_binary {
-                        return Err(CompileError::ExpectedBinaryOperator(
-                            tokens[i].1,
-                        ));
+                        return Err(CompileError::ExpectedBinaryOperator(tokens[i].1));
                     }
                     match &tokens[i].0 {
-                        Token::OpenBlock { close_idx, .. } => {
-                            i = *close_idx - range.start
-                        }
+                        Token::OpenBlock { close_idx, .. } => i = *close_idx - range.start,
                         Token::CloseBlock { .. } => {
                             panic!("Close block should be skipped.");
                         }
                         Token::Operator(_) => {
-                            if let Token::OpenBlock { ch, close_idx, .. } =
-                                tokens[i + 1].0
-                            {
+                            if let Token::OpenBlock { ch, close_idx, .. } = tokens[i + 1].0 {
                                 if ch == '(' || ch == '{' {
                                     i = close_idx - range.start;
                                 } else {
-                                    return Err(
-                                        CompileError::UnexpectedOperator(
-                                            tokens[i].1,
-                                            "$".to_string(),
-                                        ),
-                                    );
+                                    return Err(CompileError::UnexpectedOperator(
+                                        tokens[i].1,
+                                        "$".to_string(),
+                                    ));
                                 }
                             } else {
                                 return Err(CompileError::UnexpectedOperator(
@@ -143,19 +136,18 @@ pub fn parse_math(
                 let mut val;
                 let mut j = 0;
                 while let None = {
-                    val = parse_token(
-                        &mut j,
-                        arc_tokens.clone(),
-                        (range.start + 1)..range.end,
-                    )?;
+                    val = parse_token(&mut j, arc_tokens.clone(), (range.start + 1)..range.end)?;
                     j += 1;
                     &val
                 } {}
 
-                Ok(Expr(tokens[0].1, ExprType::FnCall(
-                    Box::new(Expr(tokens[i].1, ExprType::Var(op.to_fn().to_string()))),
-                    vec![val.unwrap().await.unwrap()?],
-                )))
+                Ok(Expr(
+                    tokens[0].1,
+                    ExprType::FnCall(
+                        Box::new(Expr(tokens[i].1, ExprType::Var(op.to_fn().to_string()))),
+                        vec![val.unwrap().await.unwrap()?],
+                    ),
+                ))
             } else {
                 let arg1 = spawn(parse_math(
                     range.start..(range.start + i),
@@ -167,10 +159,13 @@ pub fn parse_math(
                     arc_tokens.clone(),
                     _block_level,
                 ));
-                Ok(Expr(tokens[0].1, ExprType::FnCall(
-                    Box::new(Expr(tokens[i].1, ExprType::Var(op.to_fn().to_string()))),
-                    vec![arg1.await.unwrap()?, arg2.await.unwrap()?],
-                )))
+                Ok(Expr(
+                    tokens[0].1,
+                    ExprType::FnCall(
+                        Box::new(Expr(tokens[i].1, ExprType::Var(op.to_fn().to_string()))),
+                        vec![arg1.await.unwrap()?, arg2.await.unwrap()?],
+                    ),
+                ))
             }
         } else {
             parse_token(&mut 0, arc_tokens, range)?
@@ -194,31 +189,25 @@ pub fn parse(
             if close_idx + 1 == range.end {
                 match ch {
                     '[' => {
-                        let mut ret_handlers: Vec<
-                            JoinHandle<CompileResult<Expr>>,
-                        > = Vec::new();
+                        let mut ret_handlers: Vec<JoinHandle<CompileResult<Expr>>> = Vec::new();
                         let mut i = 1;
                         while i < tokens.len() - 1 {
-                            if let Some(expr_future) = parse_token(
-                                &mut i,
-                                arc_tokens.clone(),
-                                range.clone(),
-                            )? {
+                            if let Some(expr_future) =
+                            parse_token(&mut i, arc_tokens.clone(), range.clone())?
+                            {
                                 ret_handlers.push(expr_future);
                             }
                             i += 1;
                         }
-                        let mut ret: Vec<Expr> =
-                            Vec::with_capacity(ret_handlers.len());
+                        let mut ret: Vec<Expr> = Vec::with_capacity(ret_handlers.len());
                         for handle in ret_handlers {
                             ret.push(handle.await.unwrap()?);
                         }
                         return Ok(Expr(tokens[0].1, ExprType::List(ret)));
                     }
                     '(' | '{' => {
-                        let mut ret_handlers: Vec<
-                            Vec<JoinHandle<CompileResult<Expr>>>,
-                        > = vec![Vec::new()];
+                        let mut ret_handlers: Vec<Vec<JoinHandle<CompileResult<Expr>>>> =
+                            vec![Vec::new()];
                         let mut i = 1;
                         while i < tokens.len() - 1 {
                             match &tokens[i].0 {
@@ -226,15 +215,10 @@ pub fn parse(
                                     ret_handlers.push(Vec::new());
                                 }
                                 _ => {
-                                    if let Some(expr_future) = parse_token(
-                                        &mut i,
-                                        arc_tokens.clone(),
-                                        range.clone(),
-                                    )? {
-                                        ret_handlers
-                                            .last_mut()
-                                            .unwrap()
-                                            .push(expr_future);
+                                    if let Some(expr_future) =
+                                    parse_token(&mut i, arc_tokens.clone(), range.clone())?
+                                    {
+                                        ret_handlers.last_mut().unwrap().push(expr_future);
                                     }
                                 }
                             }
@@ -246,49 +230,50 @@ pub fn parse(
                                 Expr(tokens[0].1, ExprType::Var("none".to_string()))
                             } else {
                                 assert_eq!(ch, '{', "Shouldn't happen!");
-                                Expr(tokens[0].1, ExprType::Lambda(vec![
-                                    Expr(tokens[0].1, ExprType::Var("none".to_string()))
-                                ]))
+                                Expr(
+                                    tokens[0].1,
+                                    ExprType::Lambda(vec![Expr(
+                                        tokens[0].1,
+                                        ExprType::Var("none".to_string()),
+                                    )]),
+                                )
                             }
                         } else {
-                            let mut ret =
-                                Vec::with_capacity(ret_handlers.len());
+                            let mut ret = Vec::with_capacity(ret_handlers.len());
                             let ret_handlers_len = ret_handlers.len();
-                            for (i, ret_handlers) in
-                            ret_handlers.iter_mut().enumerate()
-                            {
+                            for (i, ret_handlers) in ret_handlers.iter_mut().enumerate() {
                                 ret_handlers.reverse();
                                 let mut none_return = i + 1 == ret_handlers_len;
-                                let fn_expr: Box<Expr> =
-                                    Box::new(match ret_handlers.pop() {
-                                        Some(handle) => {
-                                            none_return = false;
-                                            handle.await.unwrap()?
+                                let fn_expr: Box<Expr> = Box::new(match ret_handlers.pop() {
+                                    Some(handle) => {
+                                        none_return = false;
+                                        handle.await.unwrap()?
+                                    }
+                                    None => {
+                                        if none_return {
+                                            Expr(
+                                                tokens.last().unwrap().1,
+                                                ExprType::Var("none".to_string()),
+                                            )
+                                        } else {
+                                            continue;
                                         }
-                                        None => {
-                                            if none_return {
-                                                Expr(tokens.last().unwrap().1, ExprType::Var("none".to_string()))
-                                            } else {
-                                                continue;
-                                            }
-                                        }
-                                    });
-                                let mut fn_args: Vec<Expr> =
-                                    Vec::with_capacity(ret_handlers.len());
+                                    }
+                                });
+                                let mut fn_args: Vec<Expr> = Vec::with_capacity(ret_handlers.len());
                                 if !none_return {
                                     loop {
-                                        fn_args.push(
-                                            match ret_handlers.pop() {
-                                                Some(handle) => {
-                                                    handle.await.unwrap()?
-                                                }
-                                                None => break,
-                                            },
-                                        );
+                                        fn_args.push(match ret_handlers.pop() {
+                                            Some(handle) => handle.await.unwrap()?,
+                                            None => break,
+                                        });
                                     }
                                 }
                                 if ret_handlers_len == 1 && ch != '{' {
-                                    return Ok(Expr((*fn_expr).0, ExprType::FnCall(fn_expr, fn_args)));
+                                    return Ok(Expr(
+                                        (*fn_expr).0,
+                                        ExprType::FnCall(fn_expr, fn_args),
+                                    ));
                                 }
                                 ret.push(Expr((*fn_expr).0, ExprType::FnCall(fn_expr, fn_args)));
                             }
@@ -299,10 +284,7 @@ pub fn parse(
                             }
                         });
                     }
-                    _ => panic!(
-                        "The open block char '{}' isn't an open block char.",
-                        ch
-                    ),
+                    _ => panic!("The open block char '{}' isn't an open block char.", ch),
                 }
             }
         }

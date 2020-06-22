@@ -343,7 +343,12 @@ fn call(
     scope_vars: &mut Vec<String>,
 ) -> RuntimeResult<(bool, Data)> {
     match &mut fn_name {
-        Data::Lambda { exprs, args: lambda_args, vars: lambda_vars, prop_ret } => {
+        Data::Lambda {
+            exprs,
+            args: lambda_args,
+            vars: lambda_vars,
+            prop_ret,
+        } => {
             // Arguments
             if lambda_args.len() != args.len() {
                 return Err(RuntimeError::MismatchedParameterCount(
@@ -358,9 +363,7 @@ fn call(
                 if arg.0 {
                     return Ok(arg);
                 }
-                if arg.1.data_type() == lambda_args[i].1
-                    || lambda_args[i].1 == DataType::Any
-                {
+                if arg.1.data_type() == lambda_args[i].1 || lambda_args[i].1 == DataType::Any {
                     override_var(
                         lambda_vars,
                         &lambda_args[i].0,
@@ -378,8 +381,7 @@ fn call(
             let mut val = (false, Data::None);
             // Exprs
             for expr in exprs.iter() {
-                val =
-                    interpret(expr, lambda_vars, &mut lambda_scope_vars)?;
+                val = interpret(expr, lambda_vars, &mut lambda_scope_vars)?;
                 if val.0 {
                     break;
                 }
@@ -400,7 +402,11 @@ fn call(
                     return Ok(arg);
                 }
                 match &mut arg.1 {
-                    Data::Lambda { args: inputs, prop_ret, .. } => {
+                    Data::Lambda {
+                        args: inputs,
+                        prop_ret,
+                        ..
+                    } => {
                         let mut list = &list[..];
                         if let Some(Data::Bool(prop_ret_val)) = list.last() {
                             *prop_ret = *prop_ret_val;
@@ -408,24 +414,18 @@ fn call(
                         }
                         for el in list.iter() {
                             match el {
-                                Data::Str(s) => {
-                                    inputs.push((s.clone(), DataType::Any))
-                                }
+                                Data::Str(s) => inputs.push((s.clone(), DataType::Any)),
                                 Data::List(arg) => {
-                                    if let [Data::Str(s), Data::DataType(data_type)] =
-                                    &arg[..]
-                                    {
+                                    if let [Data::Str(s), Data::DataType(data_type)] = &arg[..] {
                                         inputs.push((s.clone(), *data_type));
                                     } else {
-                                        return Err(
-                                            RuntimeError::IncorrectListLambdaSyntax(fn_pos),
-                                        );
+                                        return Err(RuntimeError::IncorrectListLambdaSyntax(
+                                            fn_pos,
+                                        ));
                                     }
                                 }
                                 _ => {
-                                    return Err(
-                                        RuntimeError::IncorrectListLambdaSyntax(fn_pos),
-                                    );
+                                    return Err(RuntimeError::IncorrectListLambdaSyntax(fn_pos));
                                 }
                             }
                         }
@@ -469,12 +469,13 @@ fn call(
                         if val.0 {
                             return Ok(val);
                         }
-                        override_var(
-                            vars,
-                            &s,
-                            Rc::new(RefCell::new(val.1)),
-                            scope_vars,
-                        )?;
+                        if scope_vars.contains(&s) {
+                            return Err(RuntimeError::RedefinedVariableInTheSameScope(
+                                args[0].0,
+                                s.clone(),
+                            ));
+                        }
+                        override_var(vars, &s, Rc::new(RefCell::new(val.1)), scope_vars)?;
                         Ok((false, Data::None))
                     } else {
                         Err(RuntimeError::MismatchedDataTypes(
@@ -569,15 +570,11 @@ fn call(
                         Data::None => match into_data_type {
                             DataType::Bool => Ok((false, Data::Bool(false))),
                             DataType::None => Ok((false, Data::None)),
-                            DataType::List => {
-                                Ok((false, Data::List(vec![from.1])))
-                            }
+                            DataType::List => Ok((false, Data::List(vec![from.1]))),
                             DataType::Float => Ok((false, Data::Float(0.0))),
                             DataType::Int => Ok((false, Data::Int(0))),
                             DataType::UInt => Ok((false, Data::UInt(0))),
-                            DataType::Str => {
-                                Ok((false, Data::Str("none".to_string())))
-                            }
+                            DataType::Str => Ok((false, Data::Str("none".to_string()))),
                             _ => Err(RuntimeError::ConvertError(
                                 args[1].0,
                                 into_data_type,
@@ -586,23 +583,11 @@ fn call(
                         },
                         Data::Bool(from) => match into_data_type {
                             DataType::Bool => Ok((false, Data::Bool(from))),
-                            DataType::List => {
-                                Ok((false, Data::List(vec![Data::Bool(from)])))
-                            }
-                            DataType::Str => {
-                                Ok((false, Data::Str(from.to_string())))
-                            }
-                            DataType::UInt => Ok((
-                                false,
-                                Data::UInt(if from { 1 } else { 0 }),
-                            )),
-                            DataType::Int => {
-                                Ok((false, Data::Int(if from { 1 } else { 0 })))
-                            }
-                            DataType::Float => Ok((
-                                false,
-                                Data::Float(if from { 1. } else { 0. }),
-                            )),
+                            DataType::List => Ok((false, Data::List(vec![Data::Bool(from)]))),
+                            DataType::Str => Ok((false, Data::Str(from.to_string()))),
+                            DataType::UInt => Ok((false, Data::UInt(if from { 1 } else { 0 }))),
+                            DataType::Int => Ok((false, Data::Int(if from { 1 } else { 0 }))),
+                            DataType::Float => Ok((false, Data::Float(if from { 1. } else { 0. }))),
                             _ => Err(RuntimeError::ConvertError(
                                 args[1].0,
                                 into_data_type,
@@ -610,21 +595,11 @@ fn call(
                             )),
                         },
                         Data::Float(from) => match into_data_type {
-                            DataType::Bool => {
-                                Ok((false, Data::Bool(from != 0.)))
-                            }
-                            DataType::List => {
-                                Ok((false, Data::List(vec![Data::Float(from)])))
-                            }
-                            DataType::Str => {
-                                Ok((false, Data::Str(from.to_string())))
-                            }
-                            DataType::UInt => {
-                                Ok((false, Data::UInt(from as u32)))
-                            }
-                            DataType::Int => {
-                                Ok((false, Data::Int(from as i32)))
-                            }
+                            DataType::Bool => Ok((false, Data::Bool(from != 0.))),
+                            DataType::List => Ok((false, Data::List(vec![Data::Float(from)]))),
+                            DataType::Str => Ok((false, Data::Str(from.to_string()))),
+                            DataType::UInt => Ok((false, Data::UInt(from as u32))),
+                            DataType::Int => Ok((false, Data::Int(from as i32))),
                             DataType::Float => Ok((false, Data::Float(from))),
                             _ => Err(RuntimeError::ConvertError(
                                 args[1].0,
@@ -633,22 +608,12 @@ fn call(
                             )),
                         },
                         Data::Int(from) => match into_data_type {
-                            DataType::Bool => {
-                                Ok((false, Data::Bool(from != 0)))
-                            }
-                            DataType::List => {
-                                Ok((false, Data::List(vec![Data::Int(from)])))
-                            }
-                            DataType::Str => {
-                                Ok((false, Data::Str(from.to_string())))
-                            }
-                            DataType::UInt => {
-                                Ok((false, Data::UInt(from as u32)))
-                            }
+                            DataType::Bool => Ok((false, Data::Bool(from != 0))),
+                            DataType::List => Ok((false, Data::List(vec![Data::Int(from)]))),
+                            DataType::Str => Ok((false, Data::Str(from.to_string()))),
+                            DataType::UInt => Ok((false, Data::UInt(from as u32))),
                             DataType::Int => Ok((false, Data::Int(from))),
-                            DataType::Float => {
-                                Ok((false, Data::Float(from as f32)))
-                            }
+                            DataType::Float => Ok((false, Data::Float(from as f32))),
                             _ => Err(RuntimeError::ConvertError(
                                 args[1].0,
                                 into_data_type,
@@ -656,22 +621,12 @@ fn call(
                             )),
                         },
                         Data::UInt(from) => match into_data_type {
-                            DataType::Bool => {
-                                Ok((false, Data::Bool(from != 0)))
-                            }
-                            DataType::List => {
-                                Ok((false, Data::List(vec![Data::UInt(from)])))
-                            }
-                            DataType::Str => {
-                                Ok((false, Data::Str(from.to_string())))
-                            }
+                            DataType::Bool => Ok((false, Data::Bool(from != 0))),
+                            DataType::List => Ok((false, Data::List(vec![Data::UInt(from)]))),
+                            DataType::Str => Ok((false, Data::Str(from.to_string()))),
                             DataType::UInt => Ok((false, Data::UInt(from))),
-                            DataType::Int => {
-                                Ok((false, Data::Int(from as i32)))
-                            }
-                            DataType::Float => {
-                                Ok((false, Data::Float(from as f32)))
-                            }
+                            DataType::Int => Ok((false, Data::Int(from as i32))),
+                            DataType::Float => Ok((false, Data::Float(from as f32))),
                             _ => Err(RuntimeError::ConvertError(
                                 args[1].0,
                                 into_data_type,
@@ -679,22 +634,12 @@ fn call(
                             )),
                         },
                         Data::Str(from) => match into_data_type {
-                            DataType::Bool => {
-                                Ok((false, Data::Bool(from.parse().unwrap())))
-                            }
-                            DataType::List => {
-                                Ok((false, Data::List(vec![Data::Str(from)])))
-                            }
+                            DataType::Bool => Ok((false, Data::Bool(from.parse().unwrap()))),
+                            DataType::List => Ok((false, Data::List(vec![Data::Str(from)]))),
                             DataType::Str => Ok((false, Data::Str(from))),
-                            DataType::UInt => {
-                                Ok((false, Data::UInt(from.parse().unwrap())))
-                            }
-                            DataType::Int => {
-                                Ok((false, Data::Int(from.parse().unwrap())))
-                            }
-                            DataType::Float => {
-                                Ok((false, Data::Float(from.parse().unwrap())))
-                            }
+                            DataType::UInt => Ok((false, Data::UInt(from.parse().unwrap()))),
+                            DataType::Int => Ok((false, Data::Int(from.parse().unwrap()))),
+                            DataType::Float => Ok((false, Data::Float(from.parse().unwrap()))),
                             _ => Err(RuntimeError::ConvertError(
                                 args[1].0,
                                 into_data_type,
@@ -764,21 +709,33 @@ fn call(
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u * u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
                                             Ok((false, Data::Int(i * i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Float(f) => {
                                         if let Data::Float(f2) = arg2.1 {
                                             Ok((false, Data::Float(f * f2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Float, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Float,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedNumber(
@@ -791,21 +748,33 @@ fn call(
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u / u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
                                             Ok((false, Data::Int(i / i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Float(f) => {
                                         if let Data::Float(f2) = arg2.1 {
                                             Ok((false, Data::Float(f / f2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Float, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Float,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedNumber(
@@ -818,29 +787,33 @@ fn call(
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u % u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
-                                            Ok((
-                                                false,
-                                                Data::Int(i - (i / i2) * i2),
-                                            ))
+                                            Ok((false, Data::Int(i - (i / i2) * i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Float(f) => {
                                         if let Data::Float(f2) = arg2.1 {
-                                            Ok((
-                                                false,
-                                                Data::Float(
-                                                    f - (f / f2).floor() * f2,
-                                                ),
-                                            ))
+                                            Ok((false, Data::Float(f - (f / f2).floor() * f2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Float, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Float,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedNumber(
@@ -853,21 +826,33 @@ fn call(
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u + u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
                                             Ok((false, Data::Int(i + i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Float(f) => {
                                         if let Data::Float(f2) = arg2.1 {
                                             Ok((false, Data::Float(f + f2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Float, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Float,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedNumber(
@@ -880,21 +865,33 @@ fn call(
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u - u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
                                             Ok((false, Data::Int(i - i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Float(f) => {
                                         if let Data::Float(f2) = arg2.1 {
                                             Ok((false, Data::Float(f - f2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Float, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Float,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedNumber(
@@ -907,14 +904,22 @@ fn call(
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u << u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
                                             Ok((false, Data::Int(i << i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedInteger(
@@ -927,14 +932,22 @@ fn call(
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u >> u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
                                             Ok((false, Data::Int(i >> i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedInteger(
@@ -948,41 +961,62 @@ fn call(
                                 | CoreFnType::GreaterEq => match arg.1 {
                                     Data::UInt(u) => {
                                         if let Data::UInt(u2) = arg2.1 {
-                                            Ok((false, Data::Bool(match core_fn_type {
-                                                CoreFnType::Less => u < u2,
-                                                CoreFnType::Greater => u > u2,
-                                                CoreFnType::LessEq => u <= u2,
-                                                CoreFnType::GreaterEq => u >= u2,
-                                                _ => panic!("Shouldn't happen")
-                                            })))
+                                            Ok((
+                                                false,
+                                                Data::Bool(match core_fn_type {
+                                                    CoreFnType::Less => u < u2,
+                                                    CoreFnType::Greater => u > u2,
+                                                    CoreFnType::LessEq => u <= u2,
+                                                    CoreFnType::GreaterEq => u >= u2,
+                                                    _ => panic!("Shouldn't happen"),
+                                                }),
+                                            ))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
-                                            Ok((false, Data::Bool(match core_fn_type {
-                                                CoreFnType::Less => i < i2,
-                                                CoreFnType::Greater => i > i2,
-                                                CoreFnType::LessEq => i <= i2,
-                                                CoreFnType::GreaterEq => i >= i2,
-                                                _ => panic!("Shouldn't happen")
-                                            })))
+                                            Ok((
+                                                false,
+                                                Data::Bool(match core_fn_type {
+                                                    CoreFnType::Less => i < i2,
+                                                    CoreFnType::Greater => i > i2,
+                                                    CoreFnType::LessEq => i <= i2,
+                                                    CoreFnType::GreaterEq => i >= i2,
+                                                    _ => panic!("Shouldn't happen"),
+                                                }),
+                                            ))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Float(f) => {
                                         if let Data::Float(f2) = arg2.1 {
-                                            Ok((false, Data::Bool(match core_fn_type {
-                                                CoreFnType::Less => f < f2,
-                                                CoreFnType::Greater => f > f2,
-                                                CoreFnType::LessEq => f <= f2,
-                                                CoreFnType::GreaterEq => f >= f2,
-                                                _ => panic!("Shouldn't happen")
-                                            })))
+                                            Ok((
+                                                false,
+                                                Data::Bool(match core_fn_type {
+                                                    CoreFnType::Less => f < f2,
+                                                    CoreFnType::Greater => f > f2,
+                                                    CoreFnType::LessEq => f <= f2,
+                                                    CoreFnType::GreaterEq => f >= f2,
+                                                    _ => panic!("Shouldn't happen"),
+                                                }),
+                                            ))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Float, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Float,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedNumber(
@@ -990,25 +1024,29 @@ fn call(
                                         arg.1.data_type(),
                                     )),
                                 },
-                                CoreFnType::Equals => {
-                                    Ok((false, Data::Bool(arg.1 == arg2.1)))
-                                }
-                                CoreFnType::NotEq => {
-                                    Ok((false, Data::Bool(arg.1 != arg2.1)))
-                                }
+                                CoreFnType::Equals => Ok((false, Data::Bool(arg.1 == arg2.1))),
+                                CoreFnType::NotEq => Ok((false, Data::Bool(arg.1 != arg2.1))),
                                 CoreFnType::BitAnd => match arg.1 {
                                     Data::UInt(u) => {
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u & u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
                                             Ok((false, Data::Int(i & i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedInteger(
@@ -1021,14 +1059,22 @@ fn call(
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u ^ u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
                                             Ok((false, Data::Int(i ^ i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedInteger(
@@ -1041,14 +1087,22 @@ fn call(
                                         if let Data::UInt(u2) = arg2.1 {
                                             Ok((false, Data::UInt(u | u2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::UInt, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::UInt,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     Data::Int(i) => {
                                         if let Data::Int(i2) = arg2.1 {
                                             Ok((false, Data::Int(i | i2)))
                                         } else {
-                                            Err(RuntimeError::MismatchedDataTypes(args[1].0, DataType::Int, arg2.1.data_type()))
+                                            Err(RuntimeError::MismatchedDataTypes(
+                                                args[1].0,
+                                                DataType::Int,
+                                                arg2.1.data_type(),
+                                            ))
                                         }
                                     }
                                     _ => Err(RuntimeError::ExpectedInteger(
@@ -1068,13 +1122,11 @@ fn call(
                                             ))
                                         }
                                     }
-                                    _ => {
-                                        Err(RuntimeError::MismatchedDataTypes(
-                                            args[0].0,
-                                            DataType::Bool,
-                                            arg.1.data_type(),
-                                        ))
-                                    }
+                                    _ => Err(RuntimeError::MismatchedDataTypes(
+                                        args[0].0,
+                                        DataType::Bool,
+                                        arg.1.data_type(),
+                                    )),
                                 },
                                 CoreFnType::Or => match arg.1 {
                                     Data::Bool(b) => {
@@ -1088,13 +1140,11 @@ fn call(
                                             ))
                                         }
                                     }
-                                    _ => {
-                                        Err(RuntimeError::MismatchedDataTypes(
-                                            args[0].0,
-                                            DataType::Bool,
-                                            arg.1.data_type(),
-                                        ))
-                                    }
+                                    _ => Err(RuntimeError::MismatchedDataTypes(
+                                        args[0].0,
+                                        DataType::Bool,
+                                        arg.1.data_type(),
+                                    )),
                                 },
                                 _ => panic!("Shouldn't happen"),
                             }
@@ -1113,10 +1163,13 @@ fn call(
             if args.len() == 0 {
                 Ok((false, fn_name))
             } else {
-                Err(RuntimeError::MismatchedParameterCount(fn_pos, 0, args.len()))
+                Err(RuntimeError::MismatchedParameterCount(
+                    fn_pos,
+                    0,
+                    args.len(),
+                ))
             }
-        }
-        // _ => Err(RuntimeError::NotCallableDataType(fn_name.data_type())),
+        } // _ => Err(RuntimeError::NotCallableDataType(fn_name.data_type())),
     }
 }
 
@@ -1142,15 +1195,17 @@ pub fn interpret(
             let mut lambda_vars = HashMap::new();
             for (key, val) in vars.iter() {
                 // automatically removes empty variable override stacks so the unwrap is safe.
-                lambda_vars
-                    .insert(key.clone(), vec![val.last().unwrap().clone()]);
+                lambda_vars.insert(key.clone(), vec![val.last().unwrap().clone()]);
             }
-            Ok((false, Data::Lambda {
-                exprs: lambda.clone(),
-                args: Vec::new(),
-                vars: lambda_vars,
-                prop_ret: false,
-            }))
+            Ok((
+                false,
+                Data::Lambda {
+                    exprs: lambda.clone(),
+                    args: Vec::new(),
+                    vars: lambda_vars,
+                    prop_ret: false,
+                },
+            ))
         }
         ExprType::FnCall(fn_name, args) => {
             let fn_pos = (**fn_name).0;
@@ -1172,9 +1227,7 @@ pub fn interpret(
                     _ => {
                         if let Ok(some) = DataType::try_from(name.as_str()) {
                             Ok((false, Data::DataType(some)))
-                        } else if let Ok(some) =
-                        CoreFnType::try_from(name.as_str())
-                        {
+                        } else if let Ok(some) = CoreFnType::try_from(name.as_str()) {
                             Ok((false, Data::CoreFn(some)))
                         } else {
                             Err(RuntimeError::VarIsNotDefined(expr.0, name.clone()))

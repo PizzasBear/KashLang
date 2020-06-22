@@ -68,9 +68,7 @@ impl Operator {
 
 impl<'a> std::convert::TryFrom<(CodePos, &String, bool)> for Operator {
     type Error = CompileError;
-    fn try_from(
-        (pos, s, is_binary): (CodePos, &String, bool),
-    ) -> Result<Self, Self::Error> {
+    fn try_from((pos, s, is_binary): (CodePos, &String, bool)) -> Result<Self, Self::Error> {
         if is_binary {
             match s.as_str() {
                 "*" => Ok(Self::Mul),
@@ -91,9 +89,7 @@ impl<'a> std::convert::TryFrom<(CodePos, &String, bool)> for Operator {
                 "|" => Ok(Self::BitOr),
                 "&&" => Ok(Self::And),
                 "||" => Ok(Self::Or),
-                "!" => {
-                    Err(CompileError::UnexpectedBinaryOperator(pos, s.clone()))
-                }
+                "!" => Err(CompileError::UnexpectedBinaryOperator(pos, s.clone())),
                 _ => Err(CompileError::UnknownOperator(pos, s.clone())),
             }
         } else {
@@ -135,11 +131,7 @@ fn write_indent(f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
 }
 
 impl Expr {
-    fn fmt_indent(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-        indent: usize,
-    ) -> fmt::Result {
+    fn fmt_indent(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
         match &self.1 {
             ExprType::Literal(literal) => {
                 write!(f, "LITERAL ")?;
