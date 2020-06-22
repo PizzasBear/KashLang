@@ -1,16 +1,8 @@
 # Lang
 An interpreted lisp like language written in rust.
 
-Features include:
-- variables
-- lists
-- lambdas
-- scopes
-- operator scope
-- `if` and `if_else` functions
-- function return propegation
-
-The language is made almost entirely of function calles. A function call is structured as a line, the first word in it is the
+### Function call
+The language is made almost entirely of function calls. A function call is structured as a line, the first word in it is the
 function itself everything after is an argument of that function. The semicolon signifies the end of the function call. The
 hello world is the following.
 ```
@@ -22,6 +14,7 @@ Output:
 Hello World!
 ```
 
+### Variables
 To define a variable use the function `let`, the first argument is the name of the variable as a string
 and the second argument is its value. To use that variable you write its name.
 For example to create the variable `foo` with value `12` you write:
@@ -49,6 +42,7 @@ Output:
 hello
 ```
 
+### Scopes
 A scope is a code block it returns the last expression if it's not covered by a semicolon like in rust.
 All variables that are defined in a block are deleted when it's closed. Overriding variables is allowed in a scope
 if the variable was defined outside the scope. An example of a use of scope is:
@@ -68,10 +62,11 @@ In scope A
 Out of scope A
 ```
 You may notice that `a` was called as a function at the end of that scope. This is normal because if you call a type which
-is not ment to be used as a function it will just return itself, so in this example calling the string `"In scope A"` returns
+is not meant to be used as a function it will just return itself, so in this example calling the string `"In scope A"` returns
 itself (`"In scope A"`).
 
-A list is a dynamicly sized collection of different values. A list has its elements seperated with a space. To index a list
+### Lists
+A list is a dynamically sized collection of different values. A list has its elements seperated with a space. To index a list
 you call it as a function with an `int`/`uint` index if the index is negative then it's indexes from the end of the list.
 An example of a list is:
 ```
@@ -87,6 +82,7 @@ Output:
 2.4
 ```
 
+### Lambdas
 To create a lambda with no parameters use curly braces. The lambda will act like a scope, only it has to be
 called like a function.
 If you want to return early use the ret function.
@@ -108,6 +104,7 @@ F was called
 F output
 ```
 
+#### Arguments
 For the lambda to accept parameters, it needs to be created by calling a list with the only argument being the lambda. The list
 will be a list of the arguments the lambda receives. Each argument may be either the name of the argument or a list with the name
 and the type of the argument. For example:
@@ -134,9 +131,10 @@ Hello World!
 Error: Runtime: Expected the data type Str but found Int at 11:11.
 ```
 
-Lambdas can also propegate their return, that means if a `ret` call occurs within the lambda it will continue the call and pass
+#### Return propagation
+Lambdas can also propagate their return, that means if a `ret` call occurs within the lambda it will continue the call and pass
 it to the lambda that called it. This is used implicitly in the if and if_else functions. To explicitly specify this property
-in the lambda creation add as the last element of the list a boolean which specefies if this property will be enabled or not.
+in the lambda creation add as the last element of the list a boolean which specifies if this property will be enabled or not.
 ```
 let "ret_prop" (["a" true] {
     ret a;
