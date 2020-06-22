@@ -66,10 +66,10 @@ impl Operator {
     }
 }
 
-impl<'a> std::convert::TryFrom<(Option<CodePos>, &String, bool)> for Operator {
+impl<'a> std::convert::TryFrom<(CodePos, &String, bool)> for Operator {
     type Error = CompileError;
     fn try_from(
-        (pos, s, is_binary): (Option<CodePos>, &String, bool),
+        (pos, s, is_binary): (CodePos, &String, bool),
     ) -> Result<Self, Self::Error> {
         if is_binary {
             match s.as_str() {
@@ -115,7 +115,10 @@ pub enum Literal {
 }
 
 #[derive(Clone)]
-pub enum Expr {
+pub struct Expr(pub CodePos, pub ExprType);
+
+#[derive(Clone)]
+pub enum ExprType {
     Literal(Literal),
     Lambda(Vec<Expr>),
     FnCall(Box<Expr>, Vec<Expr>),
@@ -137,8 +140,8 @@ impl Expr {
         f: &mut fmt::Formatter<'_>,
         indent: usize,
     ) -> fmt::Result {
-        match self {
-            Self::Literal(literal) => {
+        match &self.1 {
+            ExprType::Literal(literal) => {
                 write!(f, "LITERAL ")?;
                 match literal {
                     Literal::Int(i) => write!(f, "{}", i),
@@ -147,7 +150,7 @@ impl Expr {
                     Literal::Str(s) => write!(f, "{:?}", s),
                 }?;
             }
-            Self::Lambda(lines) => {
+            ExprType::Lambda(lines) => {
                 writeln!(f, "LAMBDA {{")?;
                 for expr in lines.iter() {
                     write_indent(f, indent + 1)?;
@@ -157,7 +160,7 @@ impl Expr {
                 write_indent(f, indent)?;
                 write!(f, "}}")?;
             }
-            Self::Scope(lines) => {
+            ExprType::Scope(lines) => {
                 writeln!(f, "SCOPE (")?;
                 for expr in lines.iter() {
                     write_indent(f, indent + 1)?;
@@ -167,7 +170,7 @@ impl Expr {
                 write_indent(f, indent)?;
                 write!(f, ")")?;
             }
-            Self::FnCall(fn_expr, fn_args) => {
+            ExprType::FnCall(fn_expr, fn_args) => {
                 write!(f, "CALL ")?;
                 fn_expr.fmt_indent(f, indent)?;
                 writeln!(f, " WITH [")?;
@@ -179,7 +182,7 @@ impl Expr {
                 write_indent(f, indent)?;
                 write!(f, "]")?;
             }
-            Self::List(list) => {
+            ExprType::List(list) => {
                 writeln!(f, "LIST [")?;
                 for arg in list.iter() {
                     write_indent(f, indent + 1)?;
@@ -189,7 +192,7 @@ impl Expr {
                 write_indent(f, indent)?;
                 write!(f, "]")?;
             }
-            Self::Var(var) => {
+            ExprType::Var(var) => {
                 write!(f, "VARIABLE {}", var)?;
             }
         }

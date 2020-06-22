@@ -35,11 +35,11 @@ pub enum CompileError {
     MismatchedClosingDelimiter(CodePos, char, char),
     UnexpectedClosingDelimiter(CodePos, char),
     UnclosedStringLiteral(CodePos),
-    UnexpectedOperator(Option<CodePos>, String),
-    UnexpectedBinaryOperator(Option<CodePos>, String),
-    UnexpectedUnaryOperator(Option<CodePos>, String),
-    UnknownOperator(Option<CodePos>, String),
-    ExpectedBinaryOperator(Option<CodePos>),
+    UnexpectedOperator(CodePos, String),
+    UnexpectedBinaryOperator(CodePos, String),
+    UnexpectedUnaryOperator(CodePos, String),
+    UnknownOperator(CodePos, String),
+    ExpectedBinaryOperator(CodePos),
 }
 
 impl Error for CompileError {}
@@ -68,35 +68,34 @@ impl fmt::Debug for CompileError {
                 write!(f, "Unclosed string literal at {}.", pos)
             }
             Self::UnexpectedOperator(pos, op) => {
-                write!(f, "Unexpected operator '{}' at {:?}.", op, pos)
+                write!(f, "Unexpected operator '{}' at {}.", op, pos)
             }
             Self::UnexpectedBinaryOperator(pos, op) => {
-                write!(f, "Unexpected binary operator '{}' at {:?}.", op, pos)
+                write!(f, "Unexpected binary operator '{}' at {}.", op, pos)
             }
             Self::ExpectedBinaryOperator(pos) => {
-                write!(f, "Expected binary operator at {:?}.", pos)
+                write!(f, "Expected binary operator at {}.", pos)
             }
             Self::UnknownOperator(pos, op) => {
-                write!(f, "Unknown operator '{}' at {:?}.", op, pos)
+                write!(f, "Unknown operator '{}' at {}.", op, pos)
             }
             Self::UnexpectedUnaryOperator(pos, op) => {
-                write!(f, "Unexpected unary operator '{}' at {:?}.", op, pos)
+                write!(f, "Unexpected unary operator '{}' at {}.", op, pos)
             }
         }
     }
 }
 
 pub enum RuntimeError {
-    MismatchedParameterCount(usize, usize),
-    MismatchedDataTypes(DataType, DataType),
-    ExpectedNumber(DataType),
-    ExpectedSignedNumber(DataType),
-    ExpectedInteger(DataType),
-    NotCallableDataType(DataType),
-    CallListNotRight,
-    IncorrectListLambdaSyntax,
-    VarIsNotDefined(String),
-    ConvertError(DataType, DataType),
+    MismatchedParameterCount(CodePos, usize, usize),
+    MismatchedDataTypes(CodePos, DataType, DataType),
+    ExpectedNumber(CodePos, DataType),
+    ExpectedSignedNumber(CodePos, DataType),
+    ExpectedInteger(CodePos, DataType),
+    CallListNotRight(CodePos),
+    IncorrectListLambdaSyntax(CodePos),
+    VarIsNotDefined(CodePos, String),
+    ConvertError(CodePos, DataType, DataType),
 }
 
 impl Error for RuntimeError {}
@@ -111,33 +110,30 @@ impl fmt::Debug for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Runtime: ")?;
         match self {
-            Self::MismatchedParameterCount(a, b) => write!(
+            Self::MismatchedParameterCount(pos, a, b) => write!(
                 f,
-                "Expected {} params but {} params were supplied.",
-                a, b
+                "Expected {} params but {} params were supplied at {}.",
+                a, b, pos
             ),
-            Self::NotCallableDataType(data_type) => {
-                write!(f, "{} is not callable.", data_type)
-            }
-            Self::MismatchedDataTypes(expected, found) => write!(
+            Self::MismatchedDataTypes(pos, expected, found) => write!(
                 f,
-                "Expected the data type {} but found {}.",
-                expected, found
+                "Expected the data type {} but found {} at {}.",
+                expected, found, pos
             ),
-            Self::CallListNotRight => write!(
+            Self::CallListNotRight(pos) => write!(
                 f,
-                "Lists are not callable unless used for indexing or creating lambdas."
+                "Called list not for indexing, creating lambdas or data duplication at {}.", pos
             ),
-            Self::IncorrectListLambdaSyntax => {
-                write!(f, "Lambda argument list has incorrect structure.")
+            Self::IncorrectListLambdaSyntax(pos) => {
+                write!(f, "Lambda argument list has incorrect structure at {}.", pos)
             }
-            Self::VarIsNotDefined(var) => {
-                write!(f, "The variable `{}` isn't defined.", var)
+            Self::VarIsNotDefined(pos, var) => {
+                write!(f, "The variable `{}` isn't defined at {}.", var, pos)
             }
-            Self::ConvertError(into, from) => write!(f, "Can't convert {} into {}.", from, into),
-            Self::ExpectedNumber(found) => write!(f, "Expected number but found {}.", found),
-            Self::ExpectedSignedNumber(found) => write!(f, "Expected signed number but found {}.", found),
-            Self::ExpectedInteger(found) => write!(f, "Expected an integer type but found {}.", found),
+            Self::ConvertError(pos, into, from) => write!(f, "Can't convert {} into {} at {}.", from, into, pos),
+            Self::ExpectedNumber(pos, found) => write!(f, "Expected number but found {} at {}.", found, pos),
+            Self::ExpectedSignedNumber(pos, found) => write!(f, "Expected signed number but found {} at {}.", found, pos),
+            Self::ExpectedInteger(pos, found) => write!(f, "Expected an integer type but found {} at {}.", found, pos),
         }
     }
 }

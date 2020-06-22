@@ -53,7 +53,7 @@ const IGNORABLE: [char; 4] = [' ', '\n', '\r', '\t'];
 fn push_token(
     ch: char,
     literal_type: &mut Option<LiteralType>,
-    tokens: &mut Vec<(Token, Option<CodePos>)>,
+    tokens: &mut Vec<(Token, CodePos)>,
     literal: &mut String,
     blocks: &mut Vec<(usize, usize)>,
     code_pos: &CodePos,
@@ -63,52 +63,52 @@ fn push_token(
             LiteralType::Float => match literal.parse() {
                 Ok(f) => tokens.push((
                     Token::Literal(Literal::Float(f)),
-                    Some(CodePos {
+                    CodePos {
                         column: code_pos.column - literal.len(),
                         line: code_pos.line,
-                    }),
+                    },
                 )),
                 Err(_) => return Err(CompileError::ParseFloat(*code_pos)),
             },
             LiteralType::Int => match literal.parse() {
                 Ok(i) => tokens.push((
                     Token::Literal(Literal::Int(i)),
-                    Some(CodePos {
+                    CodePos {
                         column: code_pos.column - literal.len(),
                         line: code_pos.line,
-                    }),
+                    },
                 )),
                 Err(_) => return Err(CompileError::ParseInt(*code_pos)),
             },
             LiteralType::UInt => match literal.parse() {
                 Ok(u) => tokens.push((
                     Token::Literal(Literal::UInt(u)),
-                    Some(CodePos {
+                    CodePos {
                         column: code_pos.column - literal.len() - 1,
                         line: code_pos.line,
-                    }),
+                    },
                 )),
                 Err(_) => return Err(CompileError::ParseInt(*code_pos)),
             },
             LiteralType::Id => {
                 tokens.push((
                     Token::Id((*literal).clone()),
-                    Some(CodePos {
+                    CodePos {
                         column: code_pos.column - literal.len(),
                         line: code_pos.line,
-                    }),
+                    },
                 ));
             }
             LiteralType::Operator => tokens.push((
                 Token::Operator((*literal).clone()),
-                Some(CodePos {
+                CodePos {
                     column: code_pos.column - literal.len(),
                     line: code_pos.line,
-                }),
+                },
             )),
             LiteralType::Str(pos) => tokens.push((
                 Token::Literal(Literal::Str((*literal).clone())),
-                Some(*pos),
+                *pos,
             )),
             LiteralType::Comment => {
                 panic!("Comment token should never be pushed.")
@@ -122,7 +122,7 @@ fn push_token(
                 ch,
                 close_idx: 0,
             },
-            Some(*code_pos),
+            *code_pos,
         ));
     } else if let Some(close_idx) = where_contains(&CLOSE_BLOCK, &ch) {
         if let Some((open_token_idx, open_idx)) = blocks.pop() {
@@ -147,7 +147,7 @@ fn push_token(
                     ch,
                     open_idx: open_token_idx,
                 },
-                Some(*code_pos),
+                *code_pos,
             ));
         } else {
             return Err(CompileError::UnexpectedClosingDelimiter(
@@ -164,14 +164,17 @@ fn push_token(
 
 pub async fn lex(
     mut code: Chars<'_>,
-) -> CompileResult<Vec<(Token, Option<CodePos>)>> {
+) -> CompileResult<Vec<(Token, CodePos)>> {
     let mut tokens = vec![(
         Token::OpenBlock {
             block_level: 0,
             ch: '(',
             close_idx: 0,
         },
-        None,
+        CodePos {
+            line: 0,
+            column: 0,
+        },
     )];
     let mut literal = String::new();
     let mut literal_type = None::<LiteralType>;
@@ -255,7 +258,7 @@ pub async fn lex(
                         if literal == "-" {
                             tokens.push((
                                 Token::Operator("-".to_string()),
-                                Some(code_pos),
+                                code_pos,
                             ));
                             literal.clear();
                             literal_type = None;
@@ -351,7 +354,7 @@ pub async fn lex(
                 '"' => literal_type = Some(LiteralType::Str(code_pos)),
                 '@' => {
                     literal.clear();
-                    tokens.push((Token::Id("@".to_string()), Some(code_pos)));
+                    tokens.push((Token::Id("@".to_string()), code_pos));
                 }
                 '#' => literal_type = Some(LiteralType::Comment),
                 _ => {
@@ -380,10 +383,10 @@ pub async fn lex(
         if ch == '\n' {
             tokens.push((
                 Token::NewLine,
-                Some(CodePos {
+                CodePos {
                     column: code_pos.column - 1,
                     line: code_pos.line,
-                }),
+                },
             ));
             code_pos.line += 1;
             code_pos.column = 1;
@@ -421,7 +424,10 @@ pub async fn lex(
             ch: ')',
             open_idx: 0,
         },
-        None,
+        CodePos {
+            line: 0,
+            column: 0,
+        },
     ));
 
     Ok(tokens)

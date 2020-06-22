@@ -4,7 +4,7 @@ use std::sync::Arc;
 use futures::future::{BoxFuture, FutureExt};
 use tokio::task::{JoinHandle, spawn};
 
-use expr::Expr;
+use expr::{Expr, ExprType};
 
 use crate::{CompileError, CompileResult, lexer::Token};
 use crate::error::CodePos;
@@ -13,7 +13,7 @@ pub mod expr;
 
 pub fn parse_token(
     token_idx: &mut usize,
-    arc_tokens: Arc<[(Token, Option<CodePos>)]>,
+    arc_tokens: Arc<[(Token, CodePos)]>,
     range: std::ops::Range<usize>,
 ) -> CompileResult<Option<JoinHandle<CompileResult<Expr>>>> {
     let tokens = &arc_tokens[range.clone()];
@@ -36,11 +36,13 @@ pub fn parse_token(
         }
         Token::Literal(literal) => {
             let literal = literal.clone();
-            Ok(Some(spawn(async { Ok(Expr::Literal(literal)) })))
+            let pos = tokens[*token_idx].1;
+            Ok(Some(spawn(async move { Ok(Expr(pos, ExprType::Literal(literal))) })))
         }
         Token::Id(id) => {
             let id = id.clone();
-            Ok(Some(spawn(async { Ok(Expr::Var(id)) })))
+            let pos = tokens[*token_idx].1;
+            Ok(Some(spawn(async move { Ok(Expr(pos, ExprType::Var(id))) })))
         }
         Token::Operator(op) => {
             if let Token::OpenBlock {
@@ -70,7 +72,7 @@ pub fn parse_token(
 
 pub fn parse_math(
     range: std::ops::Range<usize>,
-    arc_tokens: Arc<[(Token, Option<CodePos>)]>,
+    arc_tokens: Arc<[(Token, CodePos)]>,
     _block_level: usize,
 ) -> BoxFuture<'static, CompileResult<Expr>> {
     async move {
@@ -96,7 +98,7 @@ pub fn parse_math(
                 _ => {
                     if is_binary {
                         return Err(CompileError::ExpectedBinaryOperator(
-                            tokens[i].1.clone(),
+                            tokens[i].1,
                         ));
                     }
                     match &tokens[i].0 {
@@ -115,14 +117,14 @@ pub fn parse_math(
                                 } else {
                                     return Err(
                                         CompileError::UnexpectedOperator(
-                                            tokens[i].1.clone(),
+                                            tokens[i].1,
                                             "$".to_string(),
                                         ),
                                     );
                                 }
                             } else {
                                 return Err(CompileError::UnexpectedOperator(
-                                    tokens[i].1.clone(),
+                                    tokens[i].1,
                                     "$".to_string(),
                                 ));
                             }
@@ -139,21 +141,21 @@ pub fn parse_math(
         if let Some((op, i)) = op {
             if op.is_unary() {
                 let mut val;
-                let mut i = 0;
+                let mut j = 0;
                 while let None = {
                     val = parse_token(
-                        &mut i,
+                        &mut j,
                         arc_tokens.clone(),
                         (range.start + 1)..range.end,
                     )?;
-                    i += 1;
+                    j += 1;
                     &val
                 } {}
 
-                Ok(Expr::FnCall(
-                    Box::new(Expr::Var(op.to_fn().to_string())),
+                Ok(Expr(tokens[0].1, ExprType::FnCall(
+                    Box::new(Expr(tokens[i].1, ExprType::Var(op.to_fn().to_string()))),
                     vec![val.unwrap().await.unwrap()?],
-                ))
+                )))
             } else {
                 let arg1 = spawn(parse_math(
                     range.start..(range.start + i),
@@ -162,13 +164,13 @@ pub fn parse_math(
                 ));
                 let arg2 = spawn(parse_math(
                     (range.start + i + 1)..range.end,
-                    arc_tokens,
+                    arc_tokens.clone(),
                     _block_level,
                 ));
-                Ok(Expr::FnCall(
-                    Box::new(Expr::Var(op.to_fn().to_string())),
+                Ok(Expr(tokens[0].1, ExprType::FnCall(
+                    Box::new(Expr(tokens[i].1, ExprType::Var(op.to_fn().to_string()))),
                     vec![arg1.await.unwrap()?, arg2.await.unwrap()?],
-                ))
+                )))
             }
         } else {
             parse_token(&mut 0, arc_tokens, range)?
@@ -183,7 +185,7 @@ pub fn parse_math(
 
 pub fn parse(
     range: std::ops::Range<usize>,
-    arc_tokens: Arc<[(Token, Option<CodePos>)]>,
+    arc_tokens: Arc<[(Token, CodePos)]>,
     _block_level: usize,
 ) -> BoxFuture<'static, CompileResult<Expr>> {
     async move {
@@ -211,7 +213,7 @@ pub fn parse(
                         for handle in ret_handlers {
                             ret.push(handle.await.unwrap()?);
                         }
-                        return Ok(Expr::List(ret));
+                        return Ok(Expr(tokens[0].1, ExprType::List(ret)));
                     }
                     '(' | '{' => {
                         let mut ret_handlers: Vec<
@@ -241,16 +243,12 @@ pub fn parse(
 
                         return Ok(if ret_handlers.len() == 0 {
                             if ch == '(' {
-                                Expr::FnCall(
-                                    Box::new(Expr::Var("@".to_string())),
-                                    vec![Expr::Var("none".to_string())],
-                                )
+                                Expr(tokens[0].1, ExprType::Var("none".to_string()))
                             } else {
                                 assert_eq!(ch, '{', "Shouldn't happen!");
-                                Expr::Lambda(vec![Expr::FnCall(
-                                    Box::new(Expr::Var("@".to_string())),
-                                    vec![Expr::Var("none".to_string())],
-                                )])
+                                Expr(tokens[0].1, ExprType::Lambda(vec![
+                                    Expr(tokens[0].1, ExprType::Var("none".to_string()))
+                                ]))
                             }
                         } else {
                             let mut ret =
@@ -269,11 +267,7 @@ pub fn parse(
                                         }
                                         None => {
                                             if none_return {
-                                                if ch == '(' {
-                                                    Expr::Var("@".to_string())
-                                                } else {
-                                                    Expr::Var("ret".to_string())
-                                                }
+                                                Expr(tokens.last().unwrap().1, ExprType::Var("none".to_string()))
                                             } else {
                                                 continue;
                                             }
@@ -281,26 +275,7 @@ pub fn parse(
                                     });
                                 let mut fn_args: Vec<Expr> =
                                     Vec::with_capacity(ret_handlers.len());
-                                if none_return {
-                                    // if ch == '{' {
-                                    //     // Default return mods
-                                    //     fn_args.push(Expr::Var(
-                                    //         "none".to_string(),
-                                    //     ));
-                                    // } else {
-                                    //     fn_args.push(Expr::Lambda(vec![
-                                    //         Expr::FnCall(
-                                    //             Box::new(Expr::Var(
-                                    //                 "ret".to_string(),
-                                    //             )),
-                                    //             vec![Expr::Var(
-                                    //                 "none".to_string(),
-                                    //             )],
-                                    //         ),
-                                    //     ]));
-                                    // }
-                                    fn_args.push(Expr::Var("none".to_string()));
-                                } else {
+                                if !none_return {
                                     loop {
                                         fn_args.push(
                                             match ret_handlers.pop() {
@@ -313,13 +288,13 @@ pub fn parse(
                                     }
                                 }
                                 if ret_handlers_len == 1 && ch != '{' {
-                                    return Ok(Expr::FnCall(fn_expr, fn_args));
+                                    return Ok(Expr((*fn_expr).0, ExprType::FnCall(fn_expr, fn_args)));
                                 }
-                                ret.push(Expr::FnCall(fn_expr, fn_args));
+                                ret.push(Expr((*fn_expr).0, ExprType::FnCall(fn_expr, fn_args)));
                             }
                             match ch {
-                                '(' => Expr::Scope(ret),
-                                '{' => Expr::Lambda(ret),
+                                '(' => Expr(tokens[0].1, ExprType::Scope(ret)),
+                                '{' => Expr(tokens[0].1, ExprType::Lambda(ret)),
                                 _ => panic!("Shouldn't happen!"),
                             }
                         });
@@ -348,7 +323,7 @@ pub fn parse(
                 )
                     .await?;
                 if *ch == '{' {
-                    return Ok(Expr::Lambda(vec![res]));
+                    return Ok(Expr(tokens[1].1, ExprType::Lambda(vec![res])));
                 }
                 return Ok(res);
             }
