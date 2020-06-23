@@ -40,6 +40,7 @@ pub enum CompileError {
     UnexpectedUnaryOperator(CodePos, String),
     UnknownOperator(CodePos, String),
     ExpectedBinaryOperator(CodePos),
+    EmptyBlock(CodePos),
 }
 
 impl Error for CompileError {}
@@ -76,21 +77,18 @@ impl fmt::Debug for CompileError {
             Self::UnexpectedUnaryOperator(pos, op) => {
                 write!(f, "Unexpected unary operator '{}' at {}.", op, pos)
             }
+            Self::EmptyBlock(pos) => write!(f, "The block at {} didn't return any value", pos),
         }
     }
 }
 
 pub enum RuntimeError {
-    MismatchedParameterCount(CodePos, usize, usize),
-    MismatchedDataTypes(CodePos, DataType, DataType),
-    ExpectedNumber(CodePos, DataType),
-    ExpectedSignedNumber(CodePos, DataType),
-    ExpectedInteger(CodePos, DataType),
-    CallListNotRight(CodePos),
-    IncorrectListLambdaSyntax(CodePos),
+    MismatchedParameterCount(CodePos, usize, usize, bool),
+    MismatchedDataTypes(CodePos, Vec<DataType>, DataType),
     VarIsNotDefined(CodePos, String),
     ConvertError(CodePos, DataType, DataType),
     RedefinedVariableInTheSameScope(CodePos, String),
+    Raised(CodePos, String),
 }
 
 impl Error for RuntimeError {}
@@ -105,25 +103,25 @@ impl fmt::Debug for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Runtime: ")?;
         match self {
-            Self::MismatchedParameterCount(pos, a, b) => write!(
-                f,
-                "Expected {} params but {} params were supplied at {}.",
-                a, b, pos
-            ),
+            Self::MismatchedParameterCount(pos, expected, found, etc) => {
+                if *etc {
+                    write!(
+                        f,
+                        "Expected at least {} params but {} params were supplied at {}.",
+                        expected, found, pos
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Expected {} params but {} params were supplied at {}.",
+                        expected, found, pos
+                    )
+                }
+            }
             Self::MismatchedDataTypes(pos, expected, found) => write!(
                 f,
-                "Expected the data type {} but found {} at {}.",
+                "Expected one of the types {:?} but found {} at {}.",
                 expected, found, pos
-            ),
-            Self::CallListNotRight(pos) => write!(
-                f,
-                "Called list not for indexing, creating lambdas or data duplication at {}.",
-                pos
-            ),
-            Self::IncorrectListLambdaSyntax(pos) => write!(
-                f,
-                "Lambda argument list has incorrect structure at {}.",
-                pos
             ),
             Self::VarIsNotDefined(pos, var) => {
                 write!(f, "The variable `{}` isn't defined at {}.", var, pos)
@@ -131,22 +129,12 @@ impl fmt::Debug for RuntimeError {
             Self::ConvertError(pos, into, from) => {
                 write!(f, "Can't convert {} into {} at {}.", from, into, pos)
             }
-            Self::ExpectedNumber(pos, found) => {
-                write!(f, "Expected number but found {} at {}.", found, pos)
-            }
-            Self::ExpectedSignedNumber(pos, found) => {
-                write!(f, "Expected signed number but found {} at {}.", found, pos)
-            }
-            Self::ExpectedInteger(pos, found) => write!(
-                f,
-                "Expected an integer type but found {} at {}.",
-                found, pos
-            ),
             Self::RedefinedVariableInTheSameScope(pos, name) => write!(
                 f,
                 "Redefined variable '{}' at the same scope it was defined in, at {}.",
                 name, pos
             ),
+            Self::Raised(pos, msg) => write!(f, "Raised: `{}` at {}", msg, pos),
         }
     }
 }

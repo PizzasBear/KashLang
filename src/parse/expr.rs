@@ -102,7 +102,7 @@ impl<'a> std::convert::TryFrom<(CodePos, &String, bool)> for Operator {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
     Str(String),
     Int(i32),

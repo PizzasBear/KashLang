@@ -4,7 +4,7 @@ use crate::{CompileError, CompileResult, error::CodePos};
 use crate::lexer::Token::CloseBlock;
 use crate::parse::expr::Literal;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
     Id(String),
     Operator(String),
@@ -26,7 +26,7 @@ pub enum Token {
 enum LiteralType {
     Id,
     Operator,
-    Str(CodePos),
+    Str(CodePos, bool),
     Int,
     UInt,
     Float,
@@ -34,9 +34,9 @@ enum LiteralType {
 }
 
 fn where_contains<'a, T, U>(a: U, cmp_el: &T) -> Option<usize>
-where
-    T: PartialEq + 'static,
-    U: IntoIterator<Item=&'a T>,
+    where
+        T: PartialEq + 'static,
+        U: IntoIterator<Item=&'a T>,
 {
     for (i, el) in a.into_iter().enumerate() {
         if *el == *cmp_el {
@@ -106,7 +106,7 @@ fn push_token(
                     line: code_pos.line,
                 },
             )),
-            LiteralType::Str(pos) => {
+            LiteralType::Str(pos, _) => {
                 tokens.push((Token::Literal(Literal::Str((*literal).clone())), *pos))
             }
             LiteralType::Comment => panic!("Comment token should never be pushed."),
@@ -289,18 +289,31 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<(Token, CodePos)>> {
                     )?;
                     continue;
                 }
-                LiteralType::Str(_) => {
+                LiteralType::Str(_, mini_str) => {
+                    let mini_str = *mini_str;
                     if prev_ch[1] == '\\' && prev_ch[0] != '\\' {
                         match ch {
                             '\\' => literal.push('\\'),
                             'n' => literal.push('\n'),
-                            '"' => literal.push('\"'),
+                            '"' if !mini_str => literal.push('\"'),
                             't' => literal.push('\t'),
                             'r' => literal.push('\r'),
                             '0' => literal.push('\0'),
-                            _ => {}
+                            ' ' | '(' | ')' | '[' | ']' | '{' | '}' if mini_str => literal.push(ch),
+                            _ => {
+                                return Err(CompileError::UnexpectedOperator(
+                                    code_pos,
+                                    "\\".to_string(),
+                                ))
+                            }
                         }
-                    } else if ch == '\"' {
+                    } else if ch == '\"'
+                        || (mini_str
+                        && match ch {
+                        ' ' | '(' | ')' | '{' | '}' | '[' | ']' | '\n' => true,
+                        _ => false,
+                    })
+                    {
                         push_token(
                             ch,
                             &mut literal_type,
@@ -309,6 +322,9 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<(Token, CodePos)>> {
                             &mut blocks,
                             &code_pos,
                         )?;
+                        if mini_str && ch != ' ' {
+                            continue;
+                        }
                     } else if ch != '\\' {
                         literal.push(ch)
                     }
@@ -331,7 +347,8 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<(Token, CodePos)>> {
                     literal_type = Some(LiteralType::Int);
                     literal.push(ch);
                 }
-                '"' => literal_type = Some(LiteralType::Str(code_pos)),
+                '"' => literal_type = Some(LiteralType::Str(code_pos, false)),
+                '\'' => literal_type = Some(LiteralType::Str(code_pos, true)),
                 '@' => {
                     literal.clear();
                     tokens.push((Token::Id("@".to_string()), code_pos));
@@ -379,8 +396,10 @@ pub async fn lex(mut code: Chars<'_>) -> CompileResult<Vec<(Token, CodePos)>> {
     }
 
     if let Some(some_literal_type) = &literal_type {
-        if let LiteralType::Str(_) = some_literal_type {
-            return Err(CompileError::UnclosedStringLiteral(code_pos));
+        if let LiteralType::Str(_, mini_str) = some_literal_type {
+            if !mini_str {
+                return Err(CompileError::UnclosedStringLiteral(code_pos));
+            }
         }
         push_token(
             '\n',

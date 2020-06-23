@@ -212,7 +212,32 @@ pub fn parse(
                         while i < tokens.len() - 1 {
                             match &tokens[i].0 {
                                 Token::Operator(op) if op == ";" => {
-                                    ret_handlers.push(Vec::new());
+                                    if i == tokens.len() - 2
+                                        || tokens[i + 1].0 == Token::NewLine
+                                        || ret_handlers.last().unwrap().is_empty()
+                                    {
+                                        return Err(CompileError::UnexpectedOperator(
+                                            tokens[i].1,
+                                            ";".to_string(),
+                                        ));
+                                    } else {
+                                        ret_handlers.push(Vec::new());
+                                    }
+                                }
+                                Token::Operator(op) if op == "\\" => {
+                                    if tokens[i + 1].0 == Token::NewLine {
+                                        i += 1;
+                                    } else {
+                                        return Err(CompileError::UnexpectedOperator(
+                                            tokens[i].1,
+                                            "\\".to_string(),
+                                        ));
+                                    }
+                                }
+                                Token::NewLine => {
+                                    if !ret_handlers.last().unwrap().is_empty() {
+                                        ret_handlers.push(Vec::new());
+                                    }
                                 }
                                 _ => {
                                     if let Some(expr_future) =
@@ -226,48 +251,24 @@ pub fn parse(
                         }
 
                         return Ok(if ret_handlers.len() == 0 {
-                            if ch == '(' {
-                                Expr(tokens[0].1, ExprType::Var("none".to_string()))
-                            } else {
-                                assert_eq!(ch, '{', "Shouldn't happen!");
-                                Expr(
-                                    tokens[0].1,
-                                    ExprType::Lambda(vec![Expr(
-                                        tokens[0].1,
-                                        ExprType::Var("none".to_string()),
-                                    )]),
-                                )
-                            }
+                            return Err(CompileError::EmptyBlock(tokens[0].1));
                         } else {
                             let mut ret = Vec::with_capacity(ret_handlers.len());
                             let ret_handlers_len = ret_handlers.len();
-                            for (i, ret_handlers) in ret_handlers.iter_mut().enumerate() {
+                            for ret_handlers in ret_handlers.iter_mut() {
                                 ret_handlers.reverse();
-                                let mut none_return = i + 1 == ret_handlers_len;
                                 let fn_expr: Box<Expr> = Box::new(match ret_handlers.pop() {
-                                    Some(handle) => {
-                                        none_return = false;
-                                        handle.await.unwrap()?
-                                    }
+                                    Some(handle) => handle.await.unwrap()?,
                                     None => {
-                                        if none_return {
-                                            Expr(
-                                                tokens.last().unwrap().1,
-                                                ExprType::Var("none".to_string()),
-                                            )
-                                        } else {
-                                            continue;
-                                        }
+                                        continue;
                                     }
                                 });
                                 let mut fn_args: Vec<Expr> = Vec::with_capacity(ret_handlers.len());
-                                if !none_return {
-                                    loop {
-                                        fn_args.push(match ret_handlers.pop() {
-                                            Some(handle) => handle.await.unwrap()?,
-                                            None => break,
-                                        });
-                                    }
+                                loop {
+                                    fn_args.push(match ret_handlers.pop() {
+                                        Some(handle) => handle.await.unwrap()?,
+                                        None => break,
+                                    });
                                 }
                                 if ret_handlers_len == 1 && ch != '{' {
                                     return Ok(Expr(
