@@ -185,7 +185,7 @@ impl<'a> TryFrom<&'a str> for CoreFnType {
 }
 
 #[derive(Clone)]
-pub enum Data {
+pub enum Data<'a> {
     Int(i32),
     UInt(u32),
     Float(f32),
@@ -193,18 +193,18 @@ pub enum Data {
     None,
     Str(String),
     Lambda {
-        exprs: Vec<Expr>,
+        exprs: &'a [Expr],
         args: Vec<(String, Vec<DataType>)>,
         etc: bool,
-        vars: HashMap<String, Vec<Rc<RefCell<Data>>>>,
+        vars: HashMap<String, Vec<Rc<RefCell<Data<'a>>>>>,
         prop_ret: bool,
     },
-    List(Vec<Data>),
+    List(Vec<Data<'a>>),
     DataType(DataType),
     CoreFn(CoreFnType),
 }
 
-impl PartialEq for Data {
+impl PartialEq for Data<'_> {
     fn eq(&self, other: &Self) -> bool {
         match self {
             Self::Int(i) => {
@@ -278,7 +278,7 @@ impl PartialEq for Data {
     }
 }
 
-impl fmt::Display for Data {
+impl fmt::Display for Data<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Int(i) => write!(f, "{}", i),
@@ -310,7 +310,7 @@ impl fmt::Display for Data {
     }
 }
 
-impl Data {
+impl Data<'_> {
     pub fn data_type(&self) -> DataType {
         match self {
             Self::Int(_) => DataType::Int,
@@ -337,10 +337,10 @@ impl Data {
     }
 }
 
-fn override_var(
-    vars: &mut HashMap<String, Vec<Rc<RefCell<Data>>>>,
+fn override_var<'a>(
+    vars: &mut HashMap<String, Vec<Rc<RefCell<Data<'a>>>>>,
     name: &String,
-    data: Rc<RefCell<Data>>,
+    data: Rc<RefCell<Data<'a>>>,
     scope_vars: &mut Vec<String>,
 ) -> RuntimeResult<()> {
     if let Some(var_override_stack) = vars.get_mut(name) {
@@ -368,13 +368,13 @@ fn undo_var_override(
     Ok(())
 }
 
-fn call(
+fn call<'a>(
     fn_pos: CodePos,
-    mut fn_name: Data,
-    args: &[Expr],
-    vars: &mut HashMap<String, Vec<Rc<RefCell<Data>>>>,
+    mut fn_name: Data<'a>,
+    args: &'a [Expr],
+    vars: &mut HashMap<String, Vec<Rc<RefCell<Data<'a>>>>>,
     scope_vars: &mut Vec<String>,
-) -> RuntimeResult<(bool, Data)> {
+) -> RuntimeResult<(bool, Data<'a>)> {
     match &mut fn_name {
         Data::Lambda {
             exprs,
@@ -1443,11 +1443,11 @@ fn call(
     }
 }
 
-pub fn interpret(
-    expr: &Expr,
-    vars: &mut HashMap<String, Vec<Rc<RefCell<Data>>>>,
+pub fn interpret<'a>(
+    expr: &'a Expr,
+    vars: &mut HashMap<String, Vec<Rc<RefCell<Data<'a>>>>>,
     scope_vars: &mut Vec<String>,
-) -> RuntimeResult<(bool, Data)> {
+) -> RuntimeResult<(bool, Data<'a>)> {
     match &expr.1 {
         ExprType::List(exprs) => {
             let mut list = Vec::with_capacity(exprs.len());
@@ -1470,7 +1470,7 @@ pub fn interpret(
             Ok((
                 false,
                 Data::Lambda {
-                    exprs: lambda.clone(),
+                    exprs: lambda,
                     args: Vec::new(),
                     vars: lambda_vars,
                     prop_ret: false,
