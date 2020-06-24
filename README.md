@@ -1,8 +1,8 @@
-# Lang
-An interpreted lisp like language written in rust.
+# Kash
+Kash is an interpreted lisp like language written in rust.
 
 ### Function call
-The language is made almost entirely of function calls. A function call is structured as a line, the first word in it is the
+Kash is made almost entirely of function calls. A function call is structured as a line, the first word in it is the
 function itself everything after is an argument of that function. The newline or a semicolon signifies the end of the function call.
 ```
 println "Hello World!"
@@ -257,10 +257,10 @@ let 'lam (lam ['a] {
 })
 
 print (lam 2)
-print (lam "LANG")
+print (lam "Kash")
 
 
 Output:
 2
-LANG
+Kash
 ```
