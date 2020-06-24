@@ -32,12 +32,12 @@ println 'Mini          'string
 #       begins here |  begins here
 #                   ends here because of the space
 
-print (typeof ')
+println (typeof ')
 
 
 Output:
 Full String
-Mini-string
+Mini string
 Str
 ```
 String escape characters are used for representing special characters. To
@@ -91,16 +91,13 @@ println 2.6 -3. 2f (typeof 0.4)
 
 
 Output:
-2.6
--3.0
-2.0
-Float
+2.6 -3.0 2.0 Float
 ```
 
 #### Lambdas
 An anonymous function more on it later.
 ```
-println print typeof (typeof print)
+println print typeof (typeof println)
 
 
 Output:
@@ -120,7 +117,7 @@ false true Bool
 #### None
 A none type, it's used as the return value of some functions like `print`.
 ```
-print none (typeof none)
+println none (typeof none)
 
 
 Output:
@@ -128,16 +125,16 @@ none None
 ```
 
 #### List
-later
+A dynamically sized list, more on that later.
 
 ### Variables
 To define a variable use the function `let`, the first argument is the name of
 the variable as a string and the second argument is its value.
-To use that variable you write its name.
+To get the value of a variable you write its name.
 For example to create the variable `foo` with value `12` you write:
 ```
 let 'foo 12
-print foo
+println foo
 
 
 Output:
@@ -145,13 +142,13 @@ Output:
 ```
 
 To change the value of a variable use the function `set`. It's very similar to `let` but the variable has to be defined before
-this function is called. As an example changing the value of `foo` to `"hello"` add the following line:
+this function is called. As an example, changing the value of `foo` to `"hello"` add the following line:
 ```
 let 'foo 12
-print foo
+println foo
 
 set 'foo "hello"
-print foo
+println foo
 
 
 Output:
@@ -164,23 +161,23 @@ A scope is a code block it returns the last expression if it's not covered by a 
 All variables that are defined in a block are deleted when it's closed. Overriding variables is allowed in a scope
 if the variable was defined outside the scope. An example of a use of scope is:
 ```
-let 'a "Out of scope A"
+let 'a "Out of scope"
 println a
 println (
-    let 'a "In scope A"
+    let 'a "In scope"
     a
 )
 println a
 
 
 Output:
-Out of scope A
-In scope A
-Out of scope A
+Out of scope
+In scope
+Out of scope
 ```
 You may notice that `a` was called as a function at the end of that scope. This is normal because if you call a type which
-is not meant to be used as a function it will just return itself, so in this example calling the string `"In scope A"` returns
-itself (`"In scope A"`).
+is not a lambda it will just return itself, so in this example calling the string `"In scope"` returns
+itself (`"In scope"`).
 
 ### Lists
 A list is a dynamically sized collection of different values. A list has its elements separated
@@ -203,12 +200,12 @@ called like a function.
 If you want to return early use the ret function.
 ```
 let 'f {
-    print "F was called"
+    println "F was called"
     "F output"
 }
-print (f)
-print '
-print (f)
+println (f)
+println '
+println (f)
 
 
 Output:
@@ -226,13 +223,13 @@ and the type of the argument. For example:
 ```
 let 'f (lam ['a 'b] {
     let 'res (add a b)
-    print res
+    println res
     [a b]
 })
-print (f 1 2)
-print (f 4.2 5.8)
+println (f 1 2)
+println (f 4.2 5.8)
 
-let "print_str" ([['s str]] { print s })
+let "print_str" (lam [['s str]] { println s })
 print_str "Hello World!"
 print_str 2
 
@@ -251,10 +248,10 @@ Lambdas can also propagate their return, that means if a `ret` call occurs withi
 it to the lambda that called it. This is used implicitly in the if and if_else functions. To explicitly specify this property
 in the lambda creation add as the last element of the list a boolean which specifies if this property will be enabled or not.
 ```
-let 'ret_prop (['a true] {
+let 'ret_prop (lam ['a true] {
     ret a
 })
-let 'lam (['a] {
+let 'lam (lam ['a] {
     ret_prop a
     ret true
 })
