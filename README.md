@@ -1,5 +1,5 @@
 # Kash
-Kash is an interpreted lisp like language written in rust.
+Kash is an interpreted lisp like language written in rust. Kash is intended for scripting.
 
 ### Function call
 Kash is made almost entirely of function calls. A function call is structured as a line, the first word in it is the
