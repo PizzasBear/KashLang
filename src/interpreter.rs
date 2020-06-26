@@ -176,7 +176,7 @@ impl<'a> TryFrom<&'a str> for CoreFnType {
             "less_eq" => Ok(Self::LessEq),
             "greater_eq" => Ok(Self::GreaterEq),
             "eq" => Ok(Self::Equals),
-            "diff" => Ok(Self::NotEq),
+            "neq" => Ok(Self::NotEq),
             "bit_and" => Ok(Self::BitAnd),
             "bit_xor" => Ok(Self::BitXor),
             "bit_or" => Ok(Self::BitOr),

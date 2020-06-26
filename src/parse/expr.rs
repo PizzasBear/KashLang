@@ -56,7 +56,7 @@ impl Operator {
             Self::LessEq => "less_eq",
             Self::GreaterEq => "greater_eq",
             Self::Equals => "eq",
-            Self::NotEq => "diff",
+            Self::NotEq => "neq",
             Self::BitAnd => "bit_and",
             Self::BitXor => "bit_xor",
             Self::BitOr => "bit_or",
