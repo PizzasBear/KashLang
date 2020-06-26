@@ -85,6 +85,7 @@ impl fmt::Debug for CompileError {
 pub enum RuntimeError {
     MismatchedParameterCount(CodePos, usize, usize, bool),
     MismatchedDataTypes(CodePos, Vec<DataType>, DataType),
+    MismatchedReturnDataTypes(CodePos, Vec<DataType>, DataType),
     VarIsNotDefined(CodePos, String),
     ConvertError(CodePos, DataType, DataType),
     RedefinedVariableInTheSameScope(CodePos, String),
@@ -122,6 +123,11 @@ impl fmt::Debug for RuntimeError {
                 f,
                 "Expected one of the types {:?} but found {} at {}.",
                 expected, found, pos
+            ),
+            Self::MismatchedReturnDataTypes(pos, expected, found) => write!(
+                f,
+                "Expected that the lambda at {} will return one of the types {:?} but found {}.",
+                pos, expected, found
             ),
             Self::VarIsNotDefined(pos, var) => {
                 write!(f, "The variable `{}` isn't defined at {}.", var, pos)

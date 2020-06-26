@@ -77,6 +77,7 @@ pub enum CoreFnType {
     Idx,
     Lambda,
     Fn,
+    While,
     // Operator functions
     Neg,
     Not,
@@ -116,6 +117,7 @@ impl CoreFnType {
             Self::Idx => (2, false),
             Self::Lambda => (2, false),
             Self::Fn => (3, false),
+            Self::While => (2, false),
             // Operator functions
             Self::Neg => (1, false),
             Self::Not => (1, false),
@@ -158,6 +160,7 @@ impl<'a> TryFrom<&'a str> for CoreFnType {
             "idx" => Ok(Self::Idx),
             "lam" => Ok(Self::Lambda),
             "fn" => Ok(Self::Fn),
+            "while" => Ok(Self::While),
             // Operator functions
             "neg" => Ok(Self::Neg),
             "not" => Ok(Self::Not),
@@ -570,8 +573,8 @@ fn call<'a>(
                                     );
                                 }
                             } else {
-                                return Err(RuntimeError::MismatchedDataTypes(
-                                    args[i * 2 + 3].0,
+                                return Err(RuntimeError::MismatchedReturnDataTypes(
+                                    args[i * 2 + 2].0,
                                     vec![DataType::Bool],
                                     case_list[i * 2 + 1].data_type(),
                                 ));
@@ -910,6 +913,28 @@ fn call<'a>(
                             vec![DataType::List],
                             base_arg_type,
                         ))
+                    }
+                }
+                CoreFnType::While => loop {
+                    let mut cond_fn = interpreted_args[0].clone();
+                    if let Data::Lambda { prop_ret, .. } = &mut cond_fn {
+                        *prop_ret = true;
+                    }
+                    let cond = call(args[0].0, cond_fn, &[], vars, scope_vars)?;
+                    if cond.0 {
+                        return Ok(cond);
+                    }
+                    if let Data::Bool(cond) = cond.1 {
+                        if cond {
+                            let mut res_fn = interpreted_args[1].clone();
+                            if let Data::Lambda { prop_ret, .. } = &mut res_fn {
+                                *prop_ret = true;
+                            }
+                            let res = call(args[1].0, res_fn, &[], vars, scope_vars)?;
+                            if res.0 {
+                                return Ok(res);
+                            }
+                        }
                     }
                 }
                 // Operator functions
