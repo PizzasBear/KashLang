@@ -934,6 +934,8 @@ fn call<'a>(
                             if res.0 {
                                 return Ok(res);
                             }
+                        } else {
+                            break Ok((false, Data::None));
                         }
                     }
                 }
