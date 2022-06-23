@@ -2,10 +2,11 @@
 name = "kash"
 version = "0.2.0"
 authors = ["PizzasBear <mx.sht06@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "0.2", features = ["macros", "rt-threaded", "rt-core", "blocking"] }
+tokio = { version = "1.18", features = ["macros", "rt-multi-thread", "rt"] }
 futures = "0.3"
+rustyline = "9.1"

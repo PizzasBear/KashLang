@@ -5,10 +5,10 @@ use std::fmt;
 use std::mem::replace;
 use std::rc::Rc;
 
-use crate::{RuntimeError, RuntimeResult};
 use crate::error::CodePos;
-use crate::parse::expr::{Expr, ExprType};
 use crate::parse::expr::Literal;
+use crate::parse::expr::{Expr, ExprType};
+use crate::{RuntimeError, RuntimeResult};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum DataType {
@@ -78,6 +78,7 @@ pub enum CoreFnType {
     Lambda,
     Fn,
     While,
+    Input,
     // Operator functions
     Neg,
     Not,
@@ -108,6 +109,7 @@ impl CoreFnType {
             Self::Println => (0, true),
             Self::Print => (1, true),
             Self::Ret => (1, true),
+            Self::Input => (0, true),
 
             Self::DefVar => (2, false),
             Self::Set => (2, false),
@@ -161,6 +163,7 @@ impl<'a> TryFrom<&'a str> for CoreFnType {
             "lam" => Ok(Self::Lambda),
             "fn" => Ok(Self::Fn),
             "while" => Ok(Self::While),
+            "input" => Ok(Self::Input),
             // Operator functions
             "neg" => Ok(Self::Neg),
             "not" => Ok(Self::Not),
@@ -521,7 +524,8 @@ fn call<'a>(
                         if b {
                             if let Data::Lambda { prop_ret, .. } = &mut interpreted_args[1] {
                                 *prop_ret = true;
-                            } else if let Data::CoreFn(_) = &interpreted_args[1] {} else {
+                            } else if let Data::CoreFn(_) = &interpreted_args[1] {
+                            } else {
                                 return Err(RuntimeError::MismatchedDataTypes(
                                     args[1].0,
                                     vec![DataType::Lambda],
@@ -556,7 +560,8 @@ fn call<'a>(
                                     if let Data::Lambda { prop_ret, .. } = &mut case_list[i * 2 + 1]
                                     {
                                         *prop_ret = true;
-                                    } else if let Data::CoreFn(_) = &case_list[i * 2 + 1] {} else {
+                                    } else if let Data::CoreFn(_) = &case_list[i * 2 + 1] {
+                                    } else {
                                         return Err(RuntimeError::MismatchedDataTypes(
                                             args[i * 2 + 3].0,
                                             vec![DataType::Lambda],
@@ -584,7 +589,8 @@ fn call<'a>(
                             let else_case = case_list.last_mut().unwrap();
                             if let Data::Lambda { prop_ret, .. } = else_case {
                                 *prop_ret = true;
-                            } else if let Data::CoreFn(_) = else_case {} else {
+                            } else if let Data::CoreFn(_) = else_case {
+                            } else {
                                 return Err(RuntimeError::MismatchedDataTypes(
                                     args.last().unwrap().0,
                                     vec![DataType::Lambda],
@@ -730,6 +736,18 @@ fn call<'a>(
                     }
                     Ok((false, Data::None))
                 }
+                CoreFnType::Input => {
+                    use std::fmt::Write;
+
+                    let mut s = String::new();
+                    for arg in interpreted_args.iter() {
+                        write!(&mut s, "{} ", arg).unwrap();
+                    }
+                    Ok((
+                        false,
+                        Data::Str(rustyline::Editor::<()>::new().readline(&s).unwrap()),
+                    ))
+                }
                 CoreFnType::TypeOf => Ok((false, Data::DataType(interpreted_args[0].data_type()))),
                 CoreFnType::RetInput => Ok((false, replace(&mut interpreted_args[0], Data::None))),
                 CoreFnType::Idx => {
@@ -793,7 +811,7 @@ fn call<'a>(
 
                     let base_arg_type = interpreted_args[base_idx].data_type();
                     if let Data::List(mut list) =
-                    replace(&mut interpreted_args[base_idx], Data::None)
+                        replace(&mut interpreted_args[base_idx], Data::None)
                     {
                         if let Data::Lambda {
                             args: inputs,
@@ -938,7 +956,7 @@ fn call<'a>(
                             break Ok((false, Data::None));
                         }
                     }
-                }
+                },
                 // Operator functions
                 _ => {
                     let arg = replace(&mut interpreted_args[0], Data::None);
