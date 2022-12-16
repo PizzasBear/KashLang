@@ -9,4 +9,4 @@ println "Hello World!"
 Then on windows open powershell, navigate to the folder and run `.\kash-windows.exe hello.ks`, on linux open POSIX compatible shell, navigate to the folder and run `./kash-linux-gnu hello.ks`.
 
 ## Learn
-Go to the (wiki)[https://github.com/PizzasBear/KashLang/wiki/].
+Go to the [GitHub Wiki](https://github.com/PizzasBear/KashLang/wiki/).
